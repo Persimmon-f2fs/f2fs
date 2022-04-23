@@ -18,6 +18,7 @@
 #include "segment.h"
 #include "xattr.h"
 #include "iostat.h"
+#include "zoned_meta_table.h"
 #include <trace/events/f2fs.h>
 
 #define on_f2fs_build_free_nids(nmi) mutex_is_locked(&(nm_i)->build_lock)
@@ -131,7 +132,7 @@ static void clear_node_page_dirty(struct page *page)
 
 static struct page *get_current_nat_page(struct f2fs_sb_info *sbi, nid_t nid)
 {
-	return f2fs_get_meta_page_retry(sbi, current_nat_addr(sbi, nid));
+  return get_mapped_page_retry(sbi, current_nat_addr(sbi, nid), true);
 }
 
 static struct page *get_next_nat_page(struct f2fs_sb_info *sbi, nid_t nid)
@@ -149,7 +150,7 @@ static struct page *get_next_nat_page(struct f2fs_sb_info *sbi, nid_t nid)
 	src_page = get_current_nat_page(sbi, nid);
 	if (IS_ERR(src_page))
 		return src_page;
-	dst_page = f2fs_grab_meta_page(sbi, dst_off);
+  dst_page = grab_mapped_page(sbi, dst_off, true);
 	f2fs_bug_on(sbi, PageDirty(src_page));
 
 	src_addr = page_address(src_page);
@@ -599,7 +600,7 @@ retry:
 	index = current_nat_addr(sbi, nid);
 	f2fs_up_read(&nm_i->nat_tree_lock);
 
-	page = f2fs_get_meta_page(sbi, index);
+  page = get_mapped_page(sbi, index, true);
 	if (IS_ERR(page))
 		return PTR_ERR(page);
 
@@ -3146,7 +3147,7 @@ static int __get_nat_bitmaps(struct f2fs_sb_info *sbi)
 	for (i = 0; i < nm_i->nat_bits_blocks; i++) {
 		struct page *page;
 
-		page = f2fs_get_meta_page(sbi, nat_bits_addr++);
+		page = get_mapped_page(sbi, nat_bits_addr++);
 		if (IS_ERR(page))
 			return PTR_ERR(page);
 

@@ -15,6 +15,7 @@
 #include "node.h"
 #include "segment.h"
 #include "xattr.h"
+#include "zoned_meta_table.h"
 
 #include <trace/events/f2fs.h>
 
@@ -495,7 +496,9 @@ struct inode *f2fs_iget(struct super_block *sb, unsigned long ino)
 		trace_f2fs_iget(inode);
 		return inode;
 	}
-	if (ino == F2FS_NODE_INO(sbi) || ino == F2FS_META_INO(sbi))
+	if (ino == F2FS_NODE_INO(sbi) ||
+      ino == F2FS_META_INO(sbi) ||
+      ino == F2FS_META_MAPED_INO(sbi))
 		goto make_now;
 
 #ifdef CONFIG_F2FS_FS_COMPRESSION
@@ -513,6 +516,9 @@ make_now:
 	} else if (ino == F2FS_META_INO(sbi)) {
 		inode->i_mapping->a_ops = &f2fs_meta_aops;
 		mapping_set_gfp_mask(inode->i_mapping, GFP_NOFS);
+  } else if (ino == F2FS_META_MAPPED_INO(sbi)) {
+    inode->i_mapping->a_ops &f2fs_mm_aops;
+    mapping_set_gfp_mask(inode->i_mapping, GFP_NOFS);
 	} else if (ino == F2FS_COMPRESS_INO(sbi)) {
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 		inode->i_mapping->a_ops = &f2fs_compress_aops;
@@ -757,6 +763,7 @@ void f2fs_evict_inode(struct inode *inode)
 
 	if (inode->i_ino == F2FS_NODE_INO(sbi) ||
 			inode->i_ino == F2FS_META_INO(sbi) ||
+      inode->i_ino == F2FS_META_MAPPED_INO(sbi) ||
 			inode->i_ino == F2FS_COMPRESS_INO(sbi))
 		goto out_clear;
 

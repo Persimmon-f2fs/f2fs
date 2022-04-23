@@ -23,6 +23,7 @@
 #include "node.h"
 #include "gc.h"
 #include "iostat.h"
+#include "zoned_meta_table.h"
 #include <trace/events/f2fs.h>
 
 #define __reverse_ffz(x) __reverse_ffs(~(x))
@@ -1890,7 +1891,14 @@ static int __issue_discard_async(struct f2fs_sb_info *sbi,
 	return __queue_discard_cmd(sbi, bdev, blkstart, blklen);
 }
 
-static int f2fs_issue_discard(struct f2fs_sb_info *sbi,
+int f2fs_issue_discard_zone(struct f2fs_sb_info *sbi, block_t blkstart,
+    block_t blklen)
+{
+  struct block_device *bdev = f2fs_target_device(sbi, blkstart, NULL);
+  return __f2fs_issue_discard_zone(sbi, bdev, blkstart, blklen);
+}
+
+int f2fs_issue_discard(struct f2fs_sb_info *sbi,
 				block_t blkstart, block_t blklen)
 {
 	sector_t start = blkstart, len = 0;
@@ -2472,7 +2480,7 @@ struct page *f2fs_get_sum_page(struct f2fs_sb_info *sbi, unsigned int segno)
 {
 	if (unlikely(f2fs_cp_error(sbi)))
 		return ERR_PTR(-EIO);
-	return f2fs_get_meta_page_retry(sbi, GET_SUM_BLOCK(sbi, segno));
+  return get_mapped_page_retry(sbi, GET_SUM_BLOCK(sbi, segno), true);
 }
 
 void f2fs_update_meta_page(struct f2fs_sb_info *sbi,
@@ -2488,7 +2496,7 @@ void f2fs_update_meta_page(struct f2fs_sb_info *sbi,
 static void write_sum_page(struct f2fs_sb_info *sbi,
 			struct f2fs_summary_block *sum_blk, block_t blk_addr)
 {
-	f2fs_update_meta_page(sbi, (void *)sum_blk, blk_addr);
+  update_mapped_page(sbi, sum_blk, blk_addr);
 }
 
 static void write_current_sum_page(struct f2fs_sb_info *sbi,
@@ -3799,11 +3807,15 @@ void f2fs_wait_on_page_writeback(struct page *page,
 {
 	if (PageWriteback(page)) {
 		struct f2fs_sb_info *sbi = F2FS_P_SB(page);
+    if (type == META_MAPPED) {
+      goto wait_on_page;
+    }
 
 		/* submit cached LFS IO */
 		f2fs_submit_merged_write_cond(sbi, NULL, page, 0, type);
 		/* sbumit cached IPU IO */
 		f2fs_submit_merged_ipu_write(sbi, NULL, page);
+wait_on_page:
 		if (ordered) {
 			wait_on_page_writeback(page);
 			f2fs_bug_on(sbi, locked && PageWriteback(page));
@@ -4072,12 +4084,16 @@ static void write_compacted_summaries(struct f2fs_sb_info *sbi, block_t blkaddr)
 
 			set_page_dirty(page);
 			f2fs_put_page(page, 1);
+      // gauge the necessity of this
+      //  f2fs_wait_on_page_writeback(page, META, true, true);
 			page = NULL;
 		}
 	}
 	if (page) {
 		set_page_dirty(page);
 		f2fs_put_page(page, 1);
+    // gauge the necessity of this
+    // f2fs_wait_on_page_writeback(page, META, true, true);
 	}
 }
 
@@ -4133,7 +4149,7 @@ int f2fs_lookup_journal_in_cursum(struct f2fs_journal *journal, int type,
 static struct page *get_current_sit_page(struct f2fs_sb_info *sbi,
 					unsigned int segno)
 {
-	return f2fs_get_meta_page(sbi, current_sit_addr(sbi, segno));
+  return get_mapped_page(sbi, current_sit_addr(sbi, segno), false);
 }
 
 static struct page *get_next_sit_page(struct f2fs_sb_info *sbi,
@@ -4146,7 +4162,7 @@ static struct page *get_next_sit_page(struct f2fs_sb_info *sbi,
 	src_off = current_sit_addr(sbi, start);
 	dst_off = next_sit_addr(sbi, src_off);
 
-	page = f2fs_grab_meta_page(sbi, dst_off);
+  page = grab_mapped_page(sbi, dst_off, true);
 	seg_info_to_sit_page(sbi, page, start);
 
 	set_page_dirty(page);
@@ -4553,15 +4569,18 @@ static int build_sit_entries(struct f2fs_sb_info *sbi)
 	unsigned int readed, start_blk = 0;
 	int err = 0;
 	block_t total_node_blocks = 0;
+  block_t node_blocks_in_journal = 0;
 
 	do {
-		readed = f2fs_ra_meta_pages(sbi, start_blk, BIO_MAX_VECS,
-							META_SIT, true);
+    readed = MAIN_SEGS(sbi);
 
+#if 0
 		start = start_blk * sit_i->sents_per_block;
 		end = (start_blk + readed) * sit_i->sents_per_block;
+#endif
+    start = start_blk * sit_i->sents_per_block;
 
-		for (; start < end && start < MAIN_SEGS(sbi); start++) {
+		for (; start < MAIN_SEGS(sbi); start++) {
 			struct f2fs_sit_block *sit_blk;
 			struct page *page;
 
@@ -4618,15 +4637,19 @@ static int build_sit_entries(struct f2fs_sb_info *sbi)
 		sit = sit_in_journal(journal, i);
 
 		old_valid_blocks = se->valid_blocks;
-		if (IS_NODESEG(se->type))
+		if (IS_NODESEG(se->type)) {
+      node_blocks_in_journal -= old_valid_blocks;
 			total_node_blocks -= old_valid_blocks;
+    }
 
 		err = check_block_count(sbi, start, &sit);
 		if (err)
 			break;
 		seg_info_from_raw_sit(se, &sit);
-		if (IS_NODESEG(se->type))
+		if (IS_NODESEG(se->type)) {
+      node_blocks_in_journal += se->valid_blocks;
 			total_node_blocks += se->valid_blocks;
+    }
 
 		if (f2fs_block_unit_discard(sbi)) {
 			if (is_set_ckpt_flags(sbi, CP_TRIMMED_FLAG)) {
@@ -4904,7 +4927,7 @@ static int check_zone_write_pointer(struct f2fs_sb_info *sbi,
 	return 0;
 }
 
-static struct f2fs_dev_info *get_target_zoned_dev(struct f2fs_sb_info *sbi,
+struct f2fs_dev_info *get_target_zoned_dev(struct f2fs_sb_info *sbi,
 						  block_t zone_blkaddr)
 {
 	int i;
@@ -4925,6 +4948,57 @@ static int report_one_zone_cb(struct blk_zone *zone, unsigned int idx,
 {
 	memcpy(data, zone, sizeof(struct blk_zone));
 	return 0;
+}
+
+int fetch_section_write_pointer(struct f2fs_sb_info *sbi, unsigned int cs_section, block_t *wp)
+{
+    struct f2fs_dev_info *zbd;
+    struct blk_zone zone;
+    block_t cs_zone_block;
+	unsigned int log_sectors_per_block;
+    sector_t zone_sector;
+    int report_count = 0;
+
+    if (!sbi) {
+        printk(KERN_INFO "sbi is null!\n");
+        return -1;
+    }
+    
+    log_sectors_per_block = sbi->log_blocksize - SECTOR_SHIFT;
+
+    //printk(KERN_INFO"fetch_section_write_pointer\n");
+
+	cs_zone_block = START_BLOCK_FROM_SEG0(sbi, GET_SEG_FROM_SEC(sbi, cs_section));
+
+    //printk(KERN_INFO"cs_zone_block: %u\n", cs_zone_block);
+
+	zbd = get_target_zoned_dev(sbi, cs_zone_block);
+	if (!zbd)
+		return -1;
+
+	/* report zone for the sector the curseg points to */
+	zone_sector = (sector_t)(cs_zone_block - zbd->start_blk)
+		<< log_sectors_per_block;
+
+    //printk(KERN_INFO"zone_sector: %u\n", zone_sector);
+
+	report_count = blkdev_report_zones(zbd->bdev, zone_sector, 1,
+				  report_one_zone_cb, &zone);
+	if (report_count != 1) {
+		f2fs_err(sbi, "Report zone failed: %s errno=(%d)",
+			 zbd->path, report_count);
+		return -1;
+    }
+
+	if (zone.type != BLK_ZONE_TYPE_SEQWRITE_REQ)
+		return -1;
+
+
+	*wp = zbd->start_blk + (zone.wp >> log_sectors_per_block);
+
+    //printk(KERN_INFO "wp: %zu\n", *wp);
+
+    return 0;
 }
 
 static int fix_curseg_write_pointer(struct f2fs_sb_info *sbi, int type)
@@ -5454,4 +5528,64 @@ void f2fs_destroy_segment_manager_caches(void)
 	kmem_cache_destroy(discard_cmd_slab);
 	kmem_cache_destroy(discard_entry_slab);
 	kmem_cache_destroy(inmem_entry_slab);
+}
+
+
+
+
+void dump_node_count(struct f2fs_sb_info *sbi) {
+	struct sit_info *sit_i = SIT_I(sbi);
+	struct curseg_info *curseg = CURSEG_I(sbi, CURSEG_COLD_DATA);
+	struct f2fs_journal *journal = curseg->journal;
+	struct seg_entry *se;
+	struct f2fs_sit_entry sit;
+	int sit_blk_cnt = SIT_BLK_CNT(sbi);
+	unsigned int i, start, end;
+	unsigned int readed, start_blk = 0;
+	int err = 0;
+	block_t total_node_blocks = 0;
+
+    for (i = 0; i < sits_in_cursum(journal); i++) {
+        unsigned int old_valid_blocks;
+
+        start = le32_to_cpu(segno_in_journal(journal, i));
+        if (start >= MAIN_SEGS(sbi)) {
+            f2fs_err(sbi, "Wrong journal entry on segno %u",
+                 start);
+            err = -EFSCORRUPTED;
+            break;
+        }
+
+        se = &sit_i->sentries[start];
+        sit = sit_in_journal(journal, i);
+
+        old_valid_blocks = se->valid_blocks;
+        if (IS_NODESEG(se->type))
+            total_node_blocks -= old_valid_blocks;
+
+        err = check_block_count(sbi, start, &sit);
+        if (err)
+            break;
+        seg_info_from_raw_sit(se, &sit);
+        if (IS_NODESEG(se->type))
+            total_node_blocks += se->valid_blocks;
+
+        if (is_set_ckpt_flags(sbi, CP_TRIMMED_FLAG)) {
+            memset(se->discard_map, 0xff, SIT_VBLOCK_MAP_SIZE);
+        } else {
+            memcpy(se->discard_map, se->cur_valid_map,
+                        SIT_VBLOCK_MAP_SIZE);
+            sbi->discard_blks += old_valid_blocks;
+            sbi->discard_blks -= se->valid_blocks;
+        }
+
+        if (__is_large_section(sbi)) {
+            get_sec_entry(sbi, start)->valid_blocks +=
+                            se->valid_blocks;
+            get_sec_entry(sbi, start)->valid_blocks -=
+                            old_valid_blocks;
+        }
+    }
+
+    printk("total_node_blocks: %lu\n", total_node_blocks);
 }

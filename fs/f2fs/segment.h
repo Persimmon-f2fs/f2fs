@@ -7,6 +7,8 @@
  */
 #include <linux/blkdev.h>
 #include <linux/backing-dev.h>
+#ifndef __SEGMENT_H__
+#define __SEGMENT_H__
 
 /* constant macro */
 #define NULL_SEGNO			((unsigned int)(~0))
@@ -98,10 +100,14 @@ static inline void sanity_check_seg_type(struct f2fs_sb_info *sbi,
 	((!__is_valid_data_blkaddr(blk_addr)) ?			\
 	NULL_SEGNO : GET_L2R_SEGNO(FREE_I(sbi),			\
 		GET_SEGNO_FROM_SEG0(sbi, blk_addr)))
+#define START_BLOCK_FROM_SEG0(sbi, segno)   \
+  ((segno) <<  (sbi)->log_blocks_per_seg)
 #define BLKS_PER_SEC(sbi)					\
 	((sbi)->segs_per_sec * (sbi)->blocks_per_seg)
 #define GET_SEC_FROM_SEG(sbi, segno)				\
 	(((segno) == -1) ? -1: (segno) / (sbi)->segs_per_sec)
+#define GET_SEC_FROM_BLK(sbi, blk_addr)     \
+  GET_SEC_FROM_SEG((sbi), (blk_addr) >> (sbi)->log_blocks_per_seg)
 #define GET_SEG_FROM_SEC(sbi, secno)				\
 	((secno) * (sbi)->segs_per_sec)
 #define GET_ZONE_FROM_SEC(sbi, secno)				\
@@ -916,3 +922,5 @@ wake_up:
 	dcc->discard_wake = 1;
 	wake_up_interruptible_all(&dcc->discard_wait_queue);
 }
+
+#endif /* __SEGMENT_H__ */

@@ -19,6 +19,7 @@
 #include "node.h"
 #include "segment.h"
 #include "iostat.h"
+#include "zoned_meta_table.h"
 #include <trace/events/f2fs.h>
 
 #define DEFAULT_CHECKPOINT_IOPRIO (IOPRIO_PRIO_VALUE(IOPRIO_CLASS_BE, 3))
@@ -1453,6 +1454,10 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	struct curseg_info *seg_i = CURSEG_I(sbi, CURSEG_HOT_NODE);
 	u64 kbytes_written;
 	int err;
+  struct f2fs_mm_info *mmi = sbi->mm_info;
+#ifdef  CONFIG_BLK_DEV_ZONED
+  int devi;
+#endif
 
 	/* Flush all the NAT/SIT pages */
 	f2fs_sync_meta_pages(sbi, META, LONG_MAX, FS_CP_META_IO);
@@ -1487,17 +1492,31 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	spin_unlock_irqrestore(&sbi->cp_lock, flags);
 
 	orphan_blocks = GET_ORPHAN_BLOCKS(orphan_num);
-	ckpt->cp_pack_start_sum = cpu_to_le32(1 + cp_payload_blks +
-			orphan_blocks);
+  ckpt->cp_pack_start_meta_bat = cpu_to_le32(1 + cp_payload_blks + orphan_blocks);
+    ckpt->cp_pack_start_meta_bit = cpu_to_le32(
+            le32_to_cpu(ckpt->cp_pack_start_meta_bat) +
+            F2FS_BAT_BLOCKS(sbi));
+    ckpt->cp_pack_start_meta_bitmap = cpu_to_le32(
+            cpu_to_le32(ckpt->cp_pack_start_meta_bit) +
+            F2FS_BIT_BLOCKS(sbi));
+	ckpt->cp_pack_start_sum = cpu_to_le32(1 + cp_payload_blks + orphan_blocks +
+            F2FS_BAT_BLOCKS(sbi) + F2FS_BIT_BLOCKS(sbi) +
+            F2FS_BITMAP_BLOCKS(sbi));
+
+    ckpt->cur_meta_secno = cpu_to_le32(mmi->current_secno);
+    ckpt->cur_meta_wp = cpu_to_le32(mmi->current_wp);
 
 	if (__remain_node_summaries(cpc->reason))
-		ckpt->cp_pack_total_block_count = cpu_to_le32(F2FS_CP_PACKS +
+		ckpt->cp_pack_total_block_count = cpu_to_le32(F2FS_CP_PACKS+
 				cp_payload_blks + data_sum_blocks +
-				orphan_blocks + NR_CURSEG_NODE_TYPE);
+				orphan_blocks + NR_CURSEG_NODE_TYPE + 
+                F2FS_BAT_BLOCKS(sbi) + F2FS_BIT_BLOCKS(sbi) +
+                F2FS_BITMAP_BLOCKS(sbi));
 	else
 		ckpt->cp_pack_total_block_count = cpu_to_le32(F2FS_CP_PACKS +
 				cp_payload_blks + data_sum_blocks +
-				orphan_blocks);
+				orphan_blocks + F2FS_BAT_BLOCKS(sbi) +
+                F2FS_BIT_BLOCKS(sbi) + F2FS_BITMAP_BLOCKS(sbi));
 
 	/* update ckpt flag for checkpoint */
 	update_ckpt_flags(sbi, cpc);
@@ -1511,7 +1530,17 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 				le32_to_cpu(ckpt->checksum_offset)))
 				= cpu_to_le32(crc32);
 
+#ifdef CONFIG_BLK_DEV_ZONED
+    devi = f2fs_target_device_index(sbi, le32_to_cpu(F2FS_RAW_SUPER(sbi)->cp_blkaddr));
+	if (f2fs_blkz_is_seq(sbi, devi, le32_to_cpu(F2FS_RAW_SUPER(sbi)->cp_blkaddr))) {
+        err = zoned_cp_next_start(sbi, &start_blk, le32_to_cpu(ckpt->cp_pack_total_block_count));
+        if (err) return err;
+    } else {
+        start_blk = __start_cp_addr(sbi);
+    }
+#else
 	start_blk = __start_cp_next_addr(sbi);
+#endif
 
 	/* write nat bits */
 	if ((cpc->reason & CP_UMOUNT) &&
@@ -1539,6 +1568,10 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 		write_orphan_inodes(sbi, start_blk);
 		start_blk += orphan_blocks;
 	}
+
+  // Persist mm data
+  mm_write_info(sbi, start_blk);
+  start_blk += F2FS_TOTAL_META_MAPPED_BLKS(sbi);
 
 	f2fs_write_data_summaries(sbi, start_blk);
 	start_blk += data_sum_blocks;

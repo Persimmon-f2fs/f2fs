@@ -34,6 +34,8 @@
 #include "xattr.h"
 #include "gc.h"
 #include "iostat.h"
+#include "zoned_meta_table.h"
+#include "tests/zoned_meta_tests.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/f2fs.h>
@@ -1592,6 +1594,9 @@ static void f2fs_put_super(struct super_block *sb)
 	iput(sbi->meta_inode);
 	sbi->meta_inode = NULL;
 
+  iput(sbi->mm_inode);
+  sbi->mm_inode = NULL;
+
 	/*
 	 * iput() can update stat information, if f2fs_write_checkpoint()
 	 * above failed with error.
@@ -1599,6 +1604,7 @@ static void f2fs_put_super(struct super_block *sb)
 	f2fs_destroy_stats(sbi);
 
 	/* destroy f2fs internal modules */
+  destroy_f2fs_mm_info(sbi);
 	f2fs_destroy_node_manager(sbi);
 	f2fs_destroy_segment_manager(sbi);
 
@@ -3152,6 +3158,7 @@ static inline bool sanity_check_area_boundary(struct f2fs_sb_info *sbi,
 	u32 sit_blkaddr = le32_to_cpu(raw_super->sit_blkaddr);
 	u32 nat_blkaddr = le32_to_cpu(raw_super->nat_blkaddr);
 	u32 ssa_blkaddr = le32_to_cpu(raw_super->ssa_blkaddr);
+  u32 last_ssa_blkaddr = le32_to_cpu(raw_super->last_ssa_blkaddr);
 	u32 main_blkaddr = le32_to_cpu(raw_super->main_blkaddr);
 	u32 segment_count_ckpt = le32_to_cpu(raw_super->segment_count_ckpt);
 	u32 segment_count_sit = le32_to_cpu(raw_super->segment_count_sit);
@@ -3196,9 +3203,9 @@ static inline bool sanity_check_area_boundary(struct f2fs_sb_info *sbi,
 	}
 
 	if (ssa_blkaddr + (segment_count_ssa << log_blocks_per_seg) !=
-							main_blkaddr) {
+							last_ssa_blkaddr + 1) {
 		f2fs_info(sbi, "Wrong SSA boundary, start(%u) end(%u) blocks(%u)",
-			  ssa_blkaddr, main_blkaddr,
+			  ssa_blkaddr, last_ssa_blkaddr + 1,
 			  segment_count_ssa << log_blocks_per_seg);
 		return true;
 	}
@@ -3565,7 +3572,7 @@ skip_cross:
 	return 0;
 }
 
-static void init_sb_info(struct f2fs_sb_info *sbi)
+void init_sb_info(struct f2fs_sb_info *sbi)
 {
 	struct f2fs_super_block *raw_super = sbi->raw_super;
 	int i;
@@ -3997,6 +4004,7 @@ static int f2fs_fill_super(struct super_block *sb, void *data, int silent)
 	int recovery, i, valid_super_block;
 	struct curseg_info *seg_i;
 	int retry_cnt = 1;
+  block_t cur_cp_addr = 0;
 
 try_onemore:
 	err = -EINVAL;
@@ -4163,10 +4171,31 @@ try_onemore:
 		goto free_page_array_cache;
 	}
 
-	err = f2fs_get_valid_checkpoint(sbi);
+  sbi->mm_inode = f2fs_iget(sb, F2FS_META_MAPPED_INO(sbi));
+  if (IS_ERR(sbi->mm_inode)) {
+    f2fs_err(sbi, "Failed to read F2FS meta mapped inode");
+    err = PTR_ERR(sbi->mm_inode);
+    goto free_meta_inode;
+  }
+
+	/* Initialize device list */
+	err = f2fs_scan_devices(sbi);
+	if (err) {
+		f2fs_err(sbi, "Failed to find devices");
+		goto free_mm_inode;
+	}
+
+	err = f2fs_init_post_read_wq(sbi);
+	if (err) {
+		f2fs_err(sbi, "Failed to initialize post read workqueue");
+		goto free_mm_inode;
+	}
+
+  // TODO: may want to allow conventional zones, eventually
+  err = zoned_get_valid_checkpoint(sbi, &cur_cp_addr);
 	if (err) {
 		f2fs_err(sbi, "Failed to get valid F2FS checkpoint");
-		goto free_meta_inode;
+		goto free_mm_inode;
 	}
 
 	if (__is_set_ckpt_flags(F2FS_CKPT(sbi), CP_QUOTA_NEED_FSCK_FLAG))
@@ -4179,18 +4208,6 @@ try_onemore:
 	if (__is_set_ckpt_flags(F2FS_CKPT(sbi), CP_FSCK_FLAG))
 		set_sbi_flag(sbi, SBI_NEED_FSCK);
 
-	/* Initialize device list */
-	err = f2fs_scan_devices(sbi);
-	if (err) {
-		f2fs_err(sbi, "Failed to find devices");
-		goto free_devices;
-	}
-
-	err = f2fs_init_post_read_wq(sbi);
-	if (err) {
-		f2fs_err(sbi, "Failed to initialize post read workqueue");
-		goto free_devices;
-	}
 
 	sbi->total_valid_node_count =
 				le32_to_cpu(sbi->ckpt->valid_node_count);
@@ -4416,6 +4433,13 @@ reset_checkpoint:
 	f2fs_update_time(sbi, CP_TIME);
 	f2fs_update_time(sbi, REQ_TIME);
 	clear_sbi_flag(sbi, SBI_CP_DISABLED_QUICK);
+
+#if 0
+  run_zoned_meta_tests(sbi);
+  err = -1;
+  goto sync_free_meta;
+#endif
+
 	return 0;
 
 sync_free_meta:
@@ -4460,9 +4484,13 @@ free_sm:
 	f2fs_destroy_post_read_wq(sbi);
 stop_ckpt_thread:
 	f2fs_stop_ckpt_thread(sbi);
-free_devices:
+free_mm_info:
+  destroy_f2fs_mm_info(sbi);
+free_mm_inode:
 	destroy_device_list(sbi);
 	kvfree(sbi->ckpt);
+  make_bad_inode(sbi->mm_inode);
+  iput(sbi->mm_inode);
 free_meta_inode:
 	make_bad_inode(sbi->meta_inode);
 	iput(sbi->meta_inode);

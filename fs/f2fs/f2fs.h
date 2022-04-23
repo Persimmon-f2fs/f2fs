@@ -1102,6 +1102,7 @@ enum count_type {
 	F2FS_RD_META,
 	F2FS_DIO_WRITE,
 	F2FS_DIO_READ,
+  F2FS_MM_META_DIRTY,
 	NR_COUNT_TYPE,
 };
 
@@ -1120,6 +1121,7 @@ enum count_type {
 enum page_type {
 	DATA,
 	NODE,
+  META_MAPPED,
 	META,
 	NR_PAGE_TYPE,
 	META_FLUSH,
@@ -1609,6 +1611,10 @@ struct f2fs_sb_info {
 	unsigned int log_blocks_per_blkz;	/* log2 F2FS blocks per zone */
 #endif
 
+  /* for metadata lba mapping */
+  struct f2fs_mm_info *mm_info;
+  struct inode *mm_inode;
+
 	/* for node-related operations */
 	struct f2fs_nm_info *nm_info;		/* node manager */
 	struct inode *node_inode;		/* cache node blocks */
@@ -1625,6 +1631,7 @@ struct f2fs_sb_info {
 	int metapage_eio_cnt;			/* EIO count */
 
 	/* for checkpoint */
+  block_t cur_cp_addr;
 	struct f2fs_checkpoint *ckpt;		/* raw checkpoint pointer */
 	int cur_cp_pack;			/* remain current cp pack */
 	spinlock_t cp_lock;			/* for flag in ckpt */
@@ -1670,6 +1677,7 @@ struct f2fs_sb_info {
 	unsigned int root_ino_num;		/* root inode number*/
 	unsigned int node_ino_num;		/* node inode number*/
 	unsigned int meta_ino_num;		/* meta inode number*/
+  unsigned int met_mapped_ino_num; /* meta mapped inode number */
 	unsigned int log_blocks_per_seg;	/* log2 blocks per segment */
 	unsigned int blocks_per_seg;		/* blocks per segment */
 	unsigned int segs_per_sec;		/* segments per section */
@@ -2036,6 +2044,11 @@ static inline struct dirty_seglist_info *DIRTY_I(struct f2fs_sb_info *sbi)
 static inline struct address_space *META_MAPPING(struct f2fs_sb_info *sbi)
 {
 	return sbi->meta_inode->i_mapping;
+}
+
+static inline struct address_space *META_MAPPED_MAPPING(struct f2fs_sb_info *sbi)
+{
+  return sbi->mm_inode->i_mapping;
 }
 
 static inline struct address_space *NODE_MAPPING(struct f2fs_sb_info *sbi)
@@ -2506,11 +2519,14 @@ static inline void *__bitmap_ptr(struct f2fs_sb_info *sbi, int flag)
 
 static inline block_t __start_cp_addr(struct f2fs_sb_info *sbi)
 {
+#if 0
 	block_t start_addr = le32_to_cpu(F2FS_RAW_SUPER(sbi)->cp_blkaddr);
 
 	if (sbi->cur_cp_pack == 2)
 		start_addr += sbi->blocks_per_seg;
 	return start_addr;
+#endif
+  return sbi->cur_cp_addr;
 }
 
 static inline block_t __start_cp_next_addr(struct f2fs_sb_info *sbi)
@@ -3704,13 +3720,15 @@ void f2fs_release_orphan_inode(struct f2fs_sb_info *sbi);
 void f2fs_add_orphan_inode(struct inode *inode);
 void f2fs_remove_orphan_inode(struct f2fs_sb_info *sbi, nid_t ino);
 int f2fs_recover_orphan_inodes(struct f2fs_sb_info *sbi);
-int f2fs_get_valid_checkpoint(struct f2fs_sb_info *sbi);
+int f2fs_get_valid_checkpoint(struct f2fs_sb_info *sbi, block_t *cp_addr);
 void f2fs_update_dirty_folio(struct inode *inode, struct folio *folio);
 void f2fs_remove_dirty_inode(struct inode *inode);
 int f2fs_sync_dirty_inodes(struct f2fs_sb_info *sbi, enum inode_type type);
 void f2fs_wait_on_all_pages(struct f2fs_sb_info *sbi, int type);
 u64 f2fs_get_sectors_written(struct f2fs_sb_info *sbi);
 int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc);
+/* do_checkpoint exposed for testing purposes */
+int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc);
 void f2fs_init_ino_entry_info(struct f2fs_sb_info *sbi);
 int __init f2fs_create_checkpoint_caches(void);
 void f2fs_destroy_checkpoint_caches(void);
@@ -4545,5 +4563,22 @@ static inline void f2fs_io_schedule_timeout(long timeout)
 
 #define EFSBADCRC	EBADMSG		/* Bad CRC detected */
 #define EFSCORRUPTED	EUCLEAN		/* Filesystem is corrupted */
+
+/* Samuel Schmidt: definitions for zone_checkpoint code */
+
+int zoned_get_valid_checkpoint(struct f2fs_sb_info *sbi, block_t *cp_addr);
+int f2fs_issue_discard_zone(struct f2fs_sb_info *sbi,
+    block_t blkstart, block_t blklen);
+int get_checkpoint_version(struct f2fs_sb_info *sbi, block_t cp_addr,
+    struct f2fs_checkpoint **cp_block, struct page **cp_page,
+    unsigned long long *version);
+struct f2fs_dev_info *get_target_zoned_dev(struct f2fs_sb_info *sbi,
+    block_t zone_blkaddr);
+int fetch_section_write_pointer(struct f2fs_sb_info *sbi, unsigned int segno,
+    block_t *wp);
+int f2fs_issue_discard(struct f2fs_sb_info *sbi,
+    block_t blkstart, block_t blklen);
+void dump_node_count(struct f2fs_sb_info *sbi);
+
 
 #endif /* _LINUX_F2FS_H */
