@@ -839,7 +839,7 @@ static __u32 f2fs_checkpoint_chksum(struct f2fs_sb_info *sbi,
 	return chksum;
 }
 
-static int get_checkpoint_version(struct f2fs_sb_info *sbi, block_t cp_addr,
+int get_checkpoint_version(struct f2fs_sb_info *sbi, block_t cp_addr,
 		struct f2fs_checkpoint **cp_block, struct page **cp_page,
 		unsigned long long *version)
 {
@@ -912,7 +912,7 @@ invalid_cp:
 	return NULL;
 }
 
-int f2fs_get_valid_checkpoint(struct f2fs_sb_info *sbi)
+int f2fs_get_valid_checkpoint(struct f2fs_sb_info *sbi, block_t *)
 {
 	struct f2fs_checkpoint *cp_block;
 	struct f2fs_super_block *fsb = sbi->raw_super;
@@ -1441,7 +1441,7 @@ u64 f2fs_get_sectors_written(struct f2fs_sb_info *sbi)
 	return get_sectors_written(sbi->sb->s_bdev);
 }
 
-static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
+int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 {
 	struct f2fs_checkpoint *ckpt = F2FS_CKPT(sbi);
 	struct f2fs_nm_info *nm_i = NM_I(sbi);

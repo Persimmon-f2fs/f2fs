@@ -24,6 +24,7 @@
 #include <linux/quotaops.h>
 #include <linux/part_stat.h>
 #include <crypto/hash.h>
+#include <linux/f2fs_fs.h>
 
 #include <linux/fscrypt.h>
 #include <linux/fsverity.h>
@@ -1102,7 +1103,7 @@ enum count_type {
 	F2FS_RD_META,
 	F2FS_DIO_WRITE,
 	F2FS_DIO_READ,
-  F2FS_MM_META_DIRTY,
+    F2FS_MM_META_DIRTY,
 	NR_COUNT_TYPE,
 };
 
@@ -1677,7 +1678,7 @@ struct f2fs_sb_info {
 	unsigned int root_ino_num;		/* root inode number*/
 	unsigned int node_ino_num;		/* node inode number*/
 	unsigned int meta_ino_num;		/* meta inode number*/
-  unsigned int met_mapped_ino_num; /* meta mapped inode number */
+    unsigned int meta_mapped_ino_num; /* meta mapped inode number */
 	unsigned int log_blocks_per_seg;	/* log2 blocks per segment */
 	unsigned int blocks_per_seg;		/* blocks per segment */
 	unsigned int segs_per_sec;		/* segments per section */
@@ -2519,13 +2520,6 @@ static inline void *__bitmap_ptr(struct f2fs_sb_info *sbi, int flag)
 
 static inline block_t __start_cp_addr(struct f2fs_sb_info *sbi)
 {
-#if 0
-	block_t start_addr = le32_to_cpu(F2FS_RAW_SUPER(sbi)->cp_blkaddr);
-
-	if (sbi->cur_cp_pack == 2)
-		start_addr += sbi->blocks_per_seg;
-	return start_addr;
-#endif
   return sbi->cur_cp_addr;
 }
 
@@ -4579,6 +4573,7 @@ int fetch_section_write_pointer(struct f2fs_sb_info *sbi, unsigned int segno,
 int f2fs_issue_discard(struct f2fs_sb_info *sbi,
     block_t blkstart, block_t blklen);
 void dump_node_count(struct f2fs_sb_info *sbi);
-
+int zoned_cp_next_start(struct f2fs_sb_info *sbi,
+        block_t *next_start, u32 write_size_blocks);
 
 #endif /* _LINUX_F2FS_H */

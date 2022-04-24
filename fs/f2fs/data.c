@@ -3501,12 +3501,12 @@ void f2fs_invalidate_folio(struct folio *folio, size_t offset, size_t length)
 			dec_page_count(sbi, F2FS_DIRTY_META);
 		} else if (inode->i_ino == F2FS_NODE_INO(sbi)) {
 			dec_page_count(sbi, F2FS_DIRTY_NODES);
-    } else if (inode->i_ino == F2FS_META_MAPPED_INO(sbi)) {
-      dec_page_count(sbi, F2FS_MM_META_DIRTY);
-		} else {
-			inode_dec_dirty_pages(inode);
-			f2fs_remove_dirty_inode(inode);
-		}
+        } else if (inode->i_ino == F2FS_META_MAPPED_INO(sbi)) {
+            dec_page_count(sbi, F2FS_MM_META_DIRTY);
+        } else {
+            inode_dec_dirty_pages(inode);
+            f2fs_remove_dirty_inode(inode);
+        }
 	}
 
 	clear_page_private_gcing(&folio->page);

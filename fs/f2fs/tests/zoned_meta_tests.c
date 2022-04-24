@@ -1,6 +1,6 @@
 #include "zoned_meta_tests.h"
 #include "../zoned_meta_table.h"
-#include <linux/f2fs_fs_modified.h>
+#include <linux/f2fs_fs.h>
 
 
 // put tests here
@@ -291,14 +291,12 @@ fail:
 static const mmi_case_t tests[] = {
     trivial_failure_case,
     trivial_success_case,
-#if 0
     can_get_mapped_page,
     can_write_mapped_page,
     can_choose_next_secno,
     can_collect_garbage,
     can_do_checkpoint,
-//    can_move_to_next_cp_zone,
-#endif
+    can_move_to_next_cp_zone,
     can_write_nat_then_sit,
     NULL,
 };

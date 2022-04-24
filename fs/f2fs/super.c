@@ -4484,8 +4484,7 @@ free_sm:
 	f2fs_destroy_post_read_wq(sbi);
 stop_ckpt_thread:
 	f2fs_stop_ckpt_thread(sbi);
-free_mm_info:
-  destroy_f2fs_mm_info(sbi);
+   destroy_f2fs_mm_info(sbi);
 free_mm_inode:
 	destroy_device_list(sbi);
 	kvfree(sbi->ckpt);

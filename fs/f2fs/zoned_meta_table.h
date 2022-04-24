@@ -1,6 +1,6 @@
 #ifndef __ZONED_META_TABLE_H__
 #define __ZONED_META_TABLE_H__
-#include <linux/f2fs_fs_modified.h>
+#include <linux/f2fs_fs.h>
 #include <linux/spinlock.h>
 #include "f2fs.h"
 #include "segment.h"
@@ -76,7 +76,7 @@ static inline bool IS_VALID_META_BLKADDR(struct f2fs_sb_info *sbi, u32 meta_addr
 static inline bool IS_VALID_META_SECNO(struct f2fs_sb_info *sbi, u32 secno)
 {
     return secno >= FIRST_META_SECNO(sbi) &&
-        secno <= (FIRST_META_SECNO + le32_to_cpu(F2FS_RAW_SUPER(sbi)->section_count_meta)); 
+        secno <= (FIRST_META_SECNO(sbi) + le32_to_cpu(F2FS_RAW_SUPER(sbi)->section_count_meta)); 
 }
 
 static inline void SET_BAT_ENTRY(struct f2fs_sb_info *sbi, u32 key, u32 meta_addr)
@@ -104,7 +104,7 @@ static inline void SET_BIT_ENTRY(struct f2fs_sb_info *sbi, u32 segno, u32 count)
 {
     struct f2fs_mm_info *mmi = sbi->mm_info;
     if (segno == BLOCK_UNALLOCATED || !IS_VALID_META_SECNO(sbi, segno)) {
-        f2fs_err(sbi, "could be invalid segno: %lu\n", segno);
+        f2fs_err(sbi, "could be invalid segno: %u\n", segno);
         return;
     }
     segno -= FIRST_META_SECNO(sbi);
@@ -115,7 +115,7 @@ static inline u32 GET_BIT_ENTRY(struct f2fs_sb_info *sbi, u32 segno)
 {
     struct f2fs_mm_info *mmi = sbi->mm_info;
     if (segno == BLOCK_UNALLOCATED || !IS_VALID_META_SECNO(sbi, segno)) {
-        f2fs_err(sbi, "could be invalid segno: %lu\n", segno);
+        f2fs_err(sbi, "could be invalid segno: %u\n", segno);
         return 0;
     }
     segno -= FIRST_META_SECNO(sbi);
@@ -128,7 +128,7 @@ static inline void SET_SECTION_BITMAP(struct f2fs_sb_info *sbi, u32 segno, int s
 {
     struct f2fs_mm_info *mmi = sbi->mm_info;
     if (!IS_VALID_META_SECNO(sbi, segno)) {
-        f2fs_err(sbi, "could be invalid segno: (%lu)", segno);
+        f2fs_err(sbi, "could be invalid segno: (%u)", segno);
         return;
     }
     segno -= FIRST_META_SECNO(sbi);
@@ -143,7 +143,7 @@ static inline bool GET_SECTION_BITMAP(struct f2fs_sb_info *sbi, u32 segno)
 {
     struct f2fs_mm_info *mmi = sbi->mm_info;
     if (!IS_VALID_META_SECNO(sbi, segno)) {
-        f2fs_err(sbi, "could be invalid segno: (%lu)", segno);
+        f2fs_err(sbi, "could be invalid segno: (%u)", segno);
         return 0;
     }
     segno -= FIRST_META_SECNO(sbi);

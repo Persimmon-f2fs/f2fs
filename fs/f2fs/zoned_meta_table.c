@@ -1,8 +1,8 @@
 #include "f2fs.h"
 #include "zoned_meta_table.h"
 #include "segment.h"
-#include "trace.h"
-#include <linux/f2fs_fs_modified.h>
+#include "iostat.h"
+#include <linux/f2fs_fs.h>
 #include <linux/err.h>
 #include <linux/pagevec.h>
 
@@ -96,9 +96,6 @@ static int write_data_to_ssd(struct f2fs_sb_info *sbi, void *src, u32 start_blk,
         write_amt -= copy_amt;
     }  
 
-    return err;
-
-out:
     return err;
 }
 
@@ -231,7 +228,6 @@ create_f2fs_mm_info(struct f2fs_sb_info *sbi, block_t cp_addr)
 
     mm_info->bat_addrs = bat_addrs;
     mm_info->block_information_table = bit_addrs;
-    mm_info->mmi_lock;
     rwlock_init(&mm_info->mmi_lock);
     sbi->mm_info = mm_info;
 
@@ -541,8 +537,6 @@ repeat:
 
 out:
         return virt_page;
-
-put_meta_page:
         f2fs_put_page(meta_page, true);
 put_virt_page:
         f2fs_put_page(virt_page, true);
@@ -675,124 +669,33 @@ redirty_out:
 }
 
 
-// TODO: this function might not be needed, ignore for now
-static long mm_sync_meta_pages(struct f2fs_sb_info *sbi, enum page_type type,
-        long nr_to_write, enum iostat_type io_type)
-{
-    struct address_space *mapping = META_MAPPED_MAPPING(sbi);
-    pgoff_t index = 0, prev = ULONG_MAX;
-    struct pagevec pvec;
-    long nwritten = 0;
-    int nr_pages = 0;
-    struct writeback_control wbc = {
-        .for_reclaim = 0,
-    };
-    int i = 0;
-    struct blk_plug plug;
-    struct page *page;
 
-    pagevec_init(&pvec);
-    blk_start_plug(&plug);
-
-    while ((nr_pages = pagevec_lookup_tag(&pvec, mapping, &index, PAGECACHE_TAG_DIRTY))) {
-        for (i = 0; i < nr_pages; ++i) {
-            page = pvec.pages[i];
-                
-            if (prev == ULONG_MAX)
-                prev = page->index - 1;
-            if (nr_to_write != LONG_MAX && page->index != prev + 1) {
-                pagevec_release(&pvec);
-                goto stop;
-            }
-            lock_page(page);
-
-            if (unlikely(page->mapping != mapping) || !PageDirty(page)) {
-                unlock_page(page);
-                continue;
-            }
-
-            // TODO: should there be a way to wait for the physical backing 
-
-            if (!clear_page_dirty_for_io(page)) {
-                unlock_page(page);
-                continue;
-            }
-
-            if (mm_write_meta_page(page, &wbc)) {
-                unlock_page(page);
-                break;
-            }
-            nwritten++;
-            prev = page->index;
-            if (unlikely(nwritten >= nr_to_write))
-                break;
-        }
-        pagevec_release(&pvec);
-        cond_resched();
-    }
-stop:
-    if (nwritten)
-        f2fs_submit_merged_write(sbi, type);
-    
-    blk_finish_plug(&plug);
-
-    return 0;
-}
-
-// TODO: this function might not be needed, ignore for now
-static int 
-mm_write_meta_pages(struct address_space *mapping,
-        struct writeback_control *wbc)
-{
-    struct f2fs_sb_info *sbi = F2FS_M_SB(mapping);
-    long diff, written;
-    
-	if (unlikely(is_sbi_flag_set(sbi, SBI_POR_DOING)))
-		goto skip_write;
-
-    if (wbc->sync_mode != WB_SYNC_ALL && 
-            get_pages(sbi, F2FS_MM_META_DIRTY) < nr_pages_to_skip(sbi, META))
-        goto skip_write;
-
-    // checkpoint will sync dirty pages
-    // TODO: make sure that this isn't also called by original code.
-    if (!down_write_trylock(&sbi->cp_global_sem))
-        goto skip_write;
-
-    diff = nr_pages_to_write(sbi, META, wbc);
-    written = mm_sync_meta_pages(sbi, META, wbc->nr_to_write, FS_META_IO);
-    up_write(&sbi->cp_global_sem);
-    wbc->nr_to_write = max((long)0, wbc->nr_to_write - written - diff);
-    return 0;
-
-
-skip_write:
-    // TODO: add tracing
-	wbc->pages_skipped += get_pages(sbi, F2FS_MM_META_DIRTY);
-    return 0;
-}
 
 // this function does not require the mmi lock
-static int
-mm_set_mapped_page_dirty(struct page *page)
+static bool
+mm_dirty_mapped_folio(struct address_space *mapping,
+        struct folio *folio)
 {
-	if (!PageUptodate(page))
-		SetPageUptodate(page);
-	if (!PageDirty(page)) {
-		__set_page_dirty_nobuffers(page);
-		inc_page_count(F2FS_P_SB(page), F2FS_MM_META_DIRTY);
-		f2fs_set_page_private(page, 0);
-		f2fs_trace_pid(page);
-		return 1;
+	if (!folio_test_uptodate(folio))
+		folio_mark_uptodate(folio);
+	if (!folio_test_dirty(folio)) {
+		filemap_dirty_folio(mapping, folio);
+		inc_page_count(F2FS_M_SB(mapping), F2FS_MM_META_DIRTY);
+		set_page_private_reference(&folio->page);
+		return true;
 	}
-    return 0;
+	return false;
 }
 
 const struct address_space_operations f2fs_mm_aops = {
     .writepage = mm_write_meta_page,
     .writepages = NULL, // unless needed
+#if 0
     .set_page_dirty = mm_set_mapped_page_dirty,
     .invalidatepage = f2fs_invalidate_page,
+#endif
+    .dirty_folio = mm_dirty_mapped_folio,
+    .invalidate_folio = f2fs_invalidate_folio,
     .releasepage = f2fs_release_page,
 };
 
@@ -863,7 +766,6 @@ mm_garbage_collect_segment(struct f2fs_sb_info *sbi, block_t secno, u32 invalid_
         meta_page = f2fs_get_meta_page(sbi, cur_blk + 1);
         if (IS_ERR(meta_page)) {
             err = PTR_ERR(meta_page);
-            f2fs_err(sbi, "Could not read data_page, %d", PTR_ERR(meta_page));
             goto out;
         }
         mb_old = page_address(meta_page);
@@ -920,7 +822,6 @@ mm_garbage_collect_segment(struct f2fs_sb_info *sbi, block_t secno, u32 invalid_
 
     return err;
 
-put_meta_page:
     f2fs_put_page(meta_page, true);
 out:
     return err;

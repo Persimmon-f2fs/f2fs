@@ -32,8 +32,10 @@
 #define F2FS_RESERVED_NODE_NUM		3
 
 #define F2FS_ROOT_INO(sbi)	((sbi)->root_ino_num)
+
 #define F2FS_NODE_INO(sbi)	((sbi)->node_ino_num)
 #define F2FS_META_INO(sbi)	((sbi)->meta_ino_num)
+#define F2FS_META_MAPPED_INO(sbi) ((sbi)->meta_mapped_ino_num)
 #define F2FS_COMPRESS_INO(sbi)	(NM_I(sbi)->max_nid)
 
 #define F2FS_MAX_QUOTAS		3
@@ -86,6 +88,7 @@ struct f2fs_super_block {
 	__le32 checksum_offset;		/* checksum offset inside super block */
 	__le64 block_count;		/* total # of user blocks */
 	__le32 section_count;		/* total # of sections */
+    __le32 section_count_meta;  /* total # of meta sections */
 	__le32 segment_count;		/* total # of segments */
 	__le32 segment_count_ckpt;	/* # of segments for checkpoint */
 	__le32 segment_count_sit;	/* # of segments for SIT */
@@ -97,10 +100,12 @@ struct f2fs_super_block {
 	__le32 sit_blkaddr;		/* start block address of SIT */
 	__le32 nat_blkaddr;		/* start block address of NAT */
 	__le32 ssa_blkaddr;		/* start block address of SSA */
+  __le32 last_ssa_blkaddr; /* last block address of SSA */
 	__le32 main_blkaddr;		/* start block address of main area */
 	__le32 root_ino;		/* root inode number */
 	__le32 node_ino;		/* node inode number */
 	__le32 meta_ino;		/* meta inode number */
+  __le32 meta_mapped_ino; /* meta mapped inode number */
 	__u8 uuid[16];			/* 128-bit uuid for volume */
 	__le16 volume_name[MAX_VOLUME_NAME];	/* volume name */
 	__le32 extension_count;		/* # of extensions below */
@@ -155,8 +160,14 @@ struct f2fs_checkpoint {
 	/* information of current data segments */
 	__le32 cur_data_segno[MAX_ACTIVE_DATA_LOGS];
 	__le16 cur_data_blkoff[MAX_ACTIVE_DATA_LOGS];
+  /* information of current meta segments */
+  __le32 cur_meta_secno;
+  __le32 cur_meta_wp;
 	__le32 ckpt_flags;		/* Flags : umount and journal_present */
 	__le32 cp_pack_total_block_count;	/* total # of one cp pack */
+  __le32 cp_pack_start_meta_bat;  /* bat block inside cp pack */
+  __le32 cp_pack_start_meta_bit;  /* bit block inside cp pack */
+  __le32 cp_pack_start_meta_bitmap;   /* bitmap blcok inside cp pack */
 	__le32 cp_pack_start_sum;	/* start block number of data summary */
 	__le32 valid_node_count;	/* Total number of valid nodes */
 	__le32 valid_inode_count;	/* Total number of valid inodes */
@@ -559,6 +570,18 @@ enum {
 	F2FS_FT_SYMLINK,
 	F2FS_FT_MAX
 };
+
+#define BAT_CHUNK_SIZE 1010
+#define SECTION_BITMAP_SIZE 10
+
+struct f2fs_meta_block {
+    bool is_gc_end;
+    __le32 lba;
+    __le32 prev_zone_id;
+    __le32 invalid_count;
+    __le32 section_bitmap[SECTION_BITMAP_SIZE];
+    __le32 bat_chunk[BAT_CHUNK_SIZE];
+} __packed;
 
 #define S_SHIFT 12
 

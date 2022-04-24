@@ -3147,7 +3147,7 @@ static int __get_nat_bitmaps(struct f2fs_sb_info *sbi)
 	for (i = 0; i < nm_i->nat_bits_blocks; i++) {
 		struct page *page;
 
-		page = get_mapped_page(sbi, nat_bits_addr++);
+		page = get_mapped_page(sbi, nat_bits_addr++, true);
 		if (IS_ERR(page))
 			return PTR_ERR(page);
 

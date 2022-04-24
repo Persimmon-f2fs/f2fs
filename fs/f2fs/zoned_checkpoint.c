@@ -19,7 +19,7 @@
 
 
 #include <linux/blkdev.h>
-#include <linux/f2fs_fs_modified.h>
+#include <linux/f2fs_fs.h>
 
 #include "f2fs.h"
 #include "segment.h"
@@ -225,8 +225,6 @@ int zoned_get_valid_checkpoint(struct f2fs_sb_info *sbi, block_t *cp_addr)
 
     sbi->cur_cp_addr = *cp_addr;
 
-    printk("valid cp_addr: %lu\n", *cp_addr);
-
     //printk("total_block_count: %lu\n", le32_to_cpu(cp_block->cp_pack_total_block_count));
 
 	if (cur_page == cp1)
@@ -251,7 +249,6 @@ int zoned_get_valid_checkpoint(struct f2fs_sb_info *sbi, block_t *cp_addr)
     // because cp_blk_no is the footer, we need to decrement it to
     // get to the beginning
     cp_blk_no -= cp_blks;
-    printk("second valid cp_addr: %lu\n", cp_blk_no);
 
 	for (i = 1; i < cp_blks; i++) {
 		void *sit_bitmap_ptr;

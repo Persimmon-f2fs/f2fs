@@ -4565,7 +4565,7 @@ static int build_sit_entries(struct f2fs_sb_info *sbi)
 	struct seg_entry *se;
 	struct f2fs_sit_entry sit;
 	int sit_blk_cnt = SIT_BLK_CNT(sbi);
-	unsigned int i, start, end;
+	unsigned int i, start;
 	unsigned int readed, start_blk = 0;
 	int err = 0;
 	block_t total_node_blocks = 0;
@@ -5539,9 +5539,7 @@ void dump_node_count(struct f2fs_sb_info *sbi) {
 	struct f2fs_journal *journal = curseg->journal;
 	struct seg_entry *se;
 	struct f2fs_sit_entry sit;
-	int sit_blk_cnt = SIT_BLK_CNT(sbi);
-	unsigned int i, start, end;
-	unsigned int readed, start_blk = 0;
+	unsigned int i, start;
 	int err = 0;
 	block_t total_node_blocks = 0;
 
@@ -5586,6 +5584,4 @@ void dump_node_count(struct f2fs_sb_info *sbi) {
                             old_valid_blocks;
         }
     }
-
-    printk("total_node_blocks: %lu\n", total_node_blocks);
 }
