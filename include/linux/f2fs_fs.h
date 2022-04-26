@@ -11,7 +11,6 @@
 #include <linux/pagemap.h>
 #include <linux/types.h>
 
-#define F2FS_SUPER_OFFSET		1024	/* byte-size offset */
 #define F2FS_MIN_LOG_SECTOR_SIZE	9	/* 9 bits for 512 bytes */
 #define F2FS_MAX_LOG_SECTOR_SIZE	12	/* 12 bits for 4096 bytes */
 #define F2FS_LOG_SECTORS_PER_BLOCK	3	/* log number for sector/blk */
@@ -19,6 +18,7 @@
 #define F2FS_BLKSIZE_BITS		12	/* bits for F2FS_BLKSIZE */
 #define F2FS_MAX_EXTENSION		64	/* # of extension entries */
 #define F2FS_EXTENSION_LEN		8	/* max size of extension */
+#define F2FS_SUPER_OFFSET		(F2FS_BLKSIZE - sizeof(struct f2fs_super_block))         /* byte-size offset */
 #define F2FS_BLK_ALIGN(x)	(((x) + F2FS_BLKSIZE - 1) >> F2FS_BLKSIZE_BITS)
 
 #define NULL_ADDR		((block_t)0)	/* used as block_t addresses */
@@ -100,17 +100,17 @@ struct f2fs_super_block {
 	__le32 sit_blkaddr;		/* start block address of SIT */
 	__le32 nat_blkaddr;		/* start block address of NAT */
 	__le32 ssa_blkaddr;		/* start block address of SSA */
-  __le32 last_ssa_blkaddr; /* last block address of SSA */
+    __le32 last_ssa_blkaddr; /* last block address of SSA */
 	__le32 main_blkaddr;		/* start block address of main area */
 	__le32 root_ino;		/* root inode number */
 	__le32 node_ino;		/* node inode number */
 	__le32 meta_ino;		/* meta inode number */
-  __le32 meta_mapped_ino; /* meta mapped inode number */
+    __le32 meta_mapped_ino; /* meta mapped inode number */
 	__u8 uuid[16];			/* 128-bit uuid for volume */
 	__le16 volume_name[MAX_VOLUME_NAME];	/* volume name */
 	__le32 extension_count;		/* # of extensions below */
-	__u8 extension_list[F2FS_MAX_EXTENSION][F2FS_EXTENSION_LEN];/* extension array */
-	__le32 cp_payload;
+	__u8 extension_list[F2FS_MAX_EXTENSION][F2FS_EXTENSION_LEN];
+    __le32 cp_payload;
 	__u8 version[VERSION_LEN];	/* the kernel version */
 	__u8 init_version[VERSION_LEN];	/* the initial kernel version */
 	__le32 feature;			/* defined features */

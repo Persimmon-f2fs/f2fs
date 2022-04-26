@@ -3249,6 +3249,10 @@ static int sanity_check_raw_super(struct f2fs_sb_info *sbi,
 	size_t crc_offset = 0;
 	__u32 crc = 0;
 
+    f2fs_info(sbi, "sizeof(raw_super): %lu", sizeof(struct f2fs_super_block));
+    f2fs_info(sbi, "major #: %u", le32_to_cpu(raw_super->major_ver));
+    f2fs_info(sbi, "minor #: %u", le32_to_cpu(raw_super->minor_ver));
+
 	if (le32_to_cpu(raw_super->magic) != F2FS_SUPER_MAGIC) {
 		f2fs_info(sbi, "Magic Mismatch, valid(0x%x) - read(0x%x)",
 			  F2FS_SUPER_MAGIC, le32_to_cpu(raw_super->magic));
@@ -4012,6 +4016,7 @@ try_onemore:
 	valid_super_block = -1;
 	recovery = 0;
 
+
 	/* allocate memory for f2fs-specific super block info */
 	sbi = kzalloc(sizeof(struct f2fs_sb_info), GFP_KERNEL);
 	if (!sbi)
@@ -4192,11 +4197,15 @@ try_onemore:
 	}
 
   // TODO: may want to allow conventional zones, eventually
-  err = zoned_get_valid_checkpoint(sbi, &cur_cp_addr);
+    err = zoned_get_valid_checkpoint(sbi, &cur_cp_addr);
 	if (err) {
 		f2fs_err(sbi, "Failed to get valid F2FS checkpoint");
 		goto free_mm_inode;
 	}
+    err = create_f2fs_mm_info(sbi, cur_cp_addr);
+    if (err) {
+        goto free_mm_inode;
+    }
 
 	if (__is_set_ckpt_flags(F2FS_CKPT(sbi), CP_QUOTA_NEED_FSCK_FLAG))
 		set_sbi_flag(sbi, SBI_QUOTA_NEED_REPAIR);
