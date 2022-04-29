@@ -19,7 +19,7 @@ struct mmi_test_t {
 
 #define ASSERT_NUM_EQUAL(test, left, right) \
     if ((left) != (right)) { \
-        ERR_PRINT("(%s) != (%s): %lu != %lu", #left, #right, left, right); \
+        ERR_PRINT("(%s) != (%s): %u != %u", #left, #right, (u32)left, (u32)right); \
         (test)->err = -1; \
         goto fail; \
     }

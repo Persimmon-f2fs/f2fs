@@ -1,7 +1,7 @@
 #ifndef __ZONED_META_TABLE_H__
 #define __ZONED_META_TABLE_H__
 #include <linux/f2fs_fs.h>
-#include <linux/spinlock.h>
+#include <linux/rwsem.h>
 #include "f2fs.h"
 #include "segment.h"
 
@@ -44,7 +44,7 @@ struct f2fs_mm_info {
     block_t *bat_addrs;
     u32 *block_information_table;
     u32 section_bitmap[SECTION_BITMAP_SIZE];
-    rwlock_t mmi_lock; // lock for manipulating mmi state w/in functions
+    struct rw_semaphore mmi_lock;
 };
 
 
@@ -64,19 +64,33 @@ static inline u32 GET_BAT_IDX(struct f2fs_sb_info *sbi, u32 key)
 {
     struct f2fs_super_block *fsb = F2FS_RAW_SUPER(sbi);
     key -= le32_to_cpu(fsb->sit_blkaddr);
+    // printk("get_bat_idx key: %u\n", key / BAT_CHUNK_SIZE);
     return key / BAT_CHUNK_SIZE;
 }
 
 static inline bool IS_VALID_META_BLKADDR(struct f2fs_sb_info *sbi, u32 meta_addr)
 {
-    return meta_addr >= le32_to_cpu(F2FS_RAW_SUPER(sbi)->sit_blkaddr) &&
-           meta_addr <= le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr);
+    bool valid = false;
+    valid = (meta_addr >= le32_to_cpu(F2FS_RAW_SUPER(sbi)->sit_blkaddr) &&
+               meta_addr <= le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr));
+    if (!valid) {
+        printk("invalid meta_addr: %u\n", meta_addr);
+    }
+    return valid;
 }
 
 static inline bool IS_VALID_META_SECNO(struct f2fs_sb_info *sbi, u32 secno)
 {
-    return secno >= FIRST_META_SECNO(sbi) &&
+    bool is_valid = secno >= FIRST_META_SECNO(sbi) &&
         secno <= (FIRST_META_SECNO(sbi) + le32_to_cpu(F2FS_RAW_SUPER(sbi)->section_count_meta)); 
+    if (!is_valid) {
+        printk("FIRST_META_SECNO (%u)\n", FIRST_META_SECNO(sbi));
+        printk("LAST_META_SECNO (%u)\n",
+                (FIRST_META_SECNO(sbi) +
+                 le32_to_cpu(F2FS_RAW_SUPER(sbi)->section_count_meta)));
+
+    }
+    return is_valid;
 }
 
 static inline void SET_BAT_ENTRY(struct f2fs_sb_info *sbi, u32 key, u32 meta_addr)
@@ -103,8 +117,11 @@ static inline block_t GET_BAT_ENTRY(struct f2fs_sb_info *sbi, u32 key)
 static inline void SET_BIT_ENTRY(struct f2fs_sb_info *sbi, u32 segno, u32 count)
 {
     struct f2fs_mm_info *mmi = sbi->mm_info;
-    if (segno == BLOCK_UNALLOCATED || !IS_VALID_META_SECNO(sbi, segno)) {
-        f2fs_err(sbi, "could be invalid segno: %u\n", segno);
+    if (segno == BLOCK_UNALLOCATED) {
+        return;
+    }
+    if (!IS_VALID_META_SECNO(sbi, segno)) {
+        f2fs_err(sbi, "set_bit_entry could be invalid segno: %u", segno);
         return;
     }
     segno -= FIRST_META_SECNO(sbi);
@@ -114,8 +131,11 @@ static inline void SET_BIT_ENTRY(struct f2fs_sb_info *sbi, u32 segno, u32 count)
 static inline u32 GET_BIT_ENTRY(struct f2fs_sb_info *sbi, u32 segno)
 {
     struct f2fs_mm_info *mmi = sbi->mm_info;
-    if (segno == BLOCK_UNALLOCATED || !IS_VALID_META_SECNO(sbi, segno)) {
-        f2fs_err(sbi, "could be invalid segno: %u\n", segno);
+    if (segno == BLOCK_UNALLOCATED) {
+        return BLOCK_UNALLOCATED;
+    }
+    if (!IS_VALID_META_SECNO(sbi, segno)) {
+        f2fs_err(sbi, "get bit entry could be invalid segno: %u", segno);
         return 0;
     }
     segno -= FIRST_META_SECNO(sbi);
@@ -127,8 +147,11 @@ static inline u32 GET_BIT_ENTRY(struct f2fs_sb_info *sbi, u32 segno)
 static inline void SET_SECTION_BITMAP(struct f2fs_sb_info *sbi, u32 segno, int state)
 {
     struct f2fs_mm_info *mmi = sbi->mm_info;
+    if (segno == BLOCK_UNALLOCATED) {
+        return;
+    }
     if (!IS_VALID_META_SECNO(sbi, segno)) {
-        f2fs_err(sbi, "could be invalid segno: (%u)", segno);
+        f2fs_err(sbi, "here! could be invalid segno: (%u)", segno);
         return;
     }
     segno -= FIRST_META_SECNO(sbi);
@@ -143,7 +166,7 @@ static inline bool GET_SECTION_BITMAP(struct f2fs_sb_info *sbi, u32 segno)
 {
     struct f2fs_mm_info *mmi = sbi->mm_info;
     if (!IS_VALID_META_SECNO(sbi, segno)) {
-        f2fs_err(sbi, "could be invalid segno: (%u)", segno);
+        f2fs_err(sbi, "get_section_bitmap could be invalid segno: (%u)", segno);
         return 0;
     }
     segno -= FIRST_META_SECNO(sbi);
@@ -152,9 +175,14 @@ static inline bool GET_SECTION_BITMAP(struct f2fs_sb_info *sbi, u32 segno)
         : SECTION_EMPTY;
 }
 
-static inline u32 MM_PHYS_ADDR(struct f2fs_sb_info *sbi, struct f2fs_meta_block *mb, u32 lba) {
-    return le32_to_cpu(mb->bat_chunk[(lba - FIRST_META_BLKADDR(sbi)) % BAT_CHUNK_SIZE]);
+static inline u32 SLOT_IN_BAT(struct f2fs_sb_info *sbi, u32 lba) {
+    return (lba - FIRST_META_BLKADDR(sbi)) % BAT_CHUNK_SIZE;
 }
+
+static inline u32 MM_PHYS_ADDR(struct f2fs_sb_info *sbi, struct f2fs_meta_block *mb, u32 lba) {
+    return le32_to_cpu(mb->bat_chunk[SLOT_IN_BAT(sbi, lba)]);
+}
+
 
 
 static inline void DUMP_BITMAP(struct f2fs_sb_info *sbi) 

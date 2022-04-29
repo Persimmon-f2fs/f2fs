@@ -3236,6 +3236,9 @@ static inline bool sanity_check_area_boundary(struct f2fs_sb_info *sbi,
 		if (err)
 			return true;
 	}
+
+    f2fs_info(sbi, "last_ssa_blkaddr: %u\n", last_ssa_blkaddr);
+
 	return false;
 }
 
@@ -3249,9 +3252,6 @@ static int sanity_check_raw_super(struct f2fs_sb_info *sbi,
 	size_t crc_offset = 0;
 	__u32 crc = 0;
 
-    f2fs_info(sbi, "sizeof(raw_super): %lu", sizeof(struct f2fs_super_block));
-    f2fs_info(sbi, "major #: %u", le32_to_cpu(raw_super->major_ver));
-    f2fs_info(sbi, "minor #: %u", le32_to_cpu(raw_super->minor_ver));
 
 	if (le32_to_cpu(raw_super->magic) != F2FS_SUPER_MAGIC) {
 		f2fs_info(sbi, "Magic Mismatch, valid(0x%x) - read(0x%x)",
@@ -3316,6 +3316,9 @@ static int sanity_check_raw_super(struct f2fs_sb_info *sbi,
 
 	/* blocks_per_seg should be 512, given the above check */
 	blocks_per_seg = 1 << le32_to_cpu(raw_super->log_blocks_per_seg);
+
+    f2fs_info(sbi, "blocks_per_seg: %u\n", blocks_per_seg);
+    f2fs_info(sbi, "segs_per_sec: %u\n", segs_per_sec);
 
 	if (segment_count > F2FS_MAX_SEGMENT ||
 				segment_count < F2FS_MIN_SEGMENTS) {
@@ -3997,6 +4000,27 @@ static void f2fs_tuning_parameters(struct f2fs_sb_info *sbi)
 	sbi->readdir_ra = 1;
 }
 
+#if 0
+static void
+test_secno(struct f2fs_sb_info *sbi) 
+{
+    block_t segno = 0, first_lba = 0, last_lba = 0, cur_lba = 0;
+
+    first_lba = le32_to_cpu(F2FS_RAW_SUPER(sbi)->sit_blkaddr);
+    last_lba = le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr);
+
+    for (cur_lba = first_lba; cur_lba < last_lba; ++cur_lba) {
+        segno = GET_SEC_FROM_BLK(sbi, cur_lba);
+        if (!IS_VALID_META_SECNO(sbi, segno)) {
+            f2fs_err(sbi, "invalid segno: (%u) for lba: (%u)", segno, cur_lba);
+        } else {
+            f2fs_err(sbi, "valid segno: (%u) for lba: (%u)", segno, cur_lba);
+        }
+
+    }
+}
+#endif
+
 static int f2fs_fill_super(struct super_block *sb, void *data, int silent)
 {
 	struct f2fs_sb_info *sbi;
@@ -4443,12 +4467,13 @@ reset_checkpoint:
 	f2fs_update_time(sbi, REQ_TIME);
 	clear_sbi_flag(sbi, SBI_CP_DISABLED_QUICK);
 
+//  run_zoned_meta_tests(sbi);
 #if 0
-  run_zoned_meta_tests(sbi);
+    test_secno(sbi);
   err = -1;
   goto sync_free_meta;
-#endif
 
+#endif
 	return 0;
 
 sync_free_meta:

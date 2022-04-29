@@ -3073,6 +3073,8 @@ int f2fs_flush_nat_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	LIST_HEAD(sets);
 	int err = 0;
 
+    // f2fs_info(sbi, "past init");
+
 	/*
 	 * during unmount, let's flush nat_bits before checking
 	 * nat_cnt[DIRTY_NAT].
@@ -3083,10 +3085,14 @@ int f2fs_flush_nat_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 		f2fs_up_write(&nm_i->nat_tree_lock);
 	}
 
+    // f2fs_info(sbi, "past remove_nats_in_journal");
+
 	if (!nm_i->nat_cnt[DIRTY_NAT])
 		return 0;
 
 	f2fs_down_write(&nm_i->nat_tree_lock);
+
+    // f2fs_info(sbi, "past down_write");
 
 	/*
 	 * if there are no enough space in journal to store dirty nat
@@ -3098,6 +3104,8 @@ int f2fs_flush_nat_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 			nm_i->nat_cnt[DIRTY_NAT], NAT_JOURNAL))
 		remove_nats_in_journal(sbi);
 
+    // f2fs_info(sbi, "second past down_write");
+
 	while ((found = __gang_lookup_nat_set(nm_i,
 					set_idx, SETVEC_SIZE, setvec))) {
 		unsigned idx;
@@ -3108,12 +3116,16 @@ int f2fs_flush_nat_entries(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 						MAX_NAT_JENTRIES(journal));
 	}
 
+    // f2fs_info(sbi, "second past gang lookup nat set");
+
 	/* flush dirty nats in nat entry set */
 	list_for_each_entry_safe(set, tmp, &sets, set_list) {
 		err = __flush_nat_entry_set(sbi, set, cpc);
 		if (err)
 			break;
 	}
+
+    // f2fs_info(sbi, "second past gang lookup nat set");
 
 	f2fs_up_write(&nm_i->nat_tree_lock);
 	/* Allow dirty nats by node block allocation in write_begin */

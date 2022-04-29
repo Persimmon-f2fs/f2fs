@@ -1,5 +1,6 @@
 #include "zoned_meta_tests.h"
 #include "../zoned_meta_table.h"
+#include "../segment.h"
 #include <linux/f2fs_fs.h>
 
 
@@ -301,6 +302,24 @@ static const mmi_case_t tests[] = {
     NULL,
 };
 
+static void
+can_calculate_segno(struct mmi_test_t *test)
+{
+    block_t segno = 0, first_lba = 0, last_lba = 0, cur_lba = 0;
+    struct f2fs_sb_info *sbi = test->sbi;
+
+    first_lba = le32_to_cpu(F2FS_RAW_SUPER(sbi)->sit_blkaddr);
+    last_lba = le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr);
+
+    for (cur_lba = first_lba; cur_lba < last_lba; ++cur_lba) {
+        segno = GET_SEC_FROM_BLK(sbi, cur_lba);
+        ASSERT_NUM_EQUAL(test, IS_VALID_META_SECNO(sbi, segno), true);
+    }
+
+fail:
+    return;
+}
+
 
 int
 run_zoned_meta_tests(struct f2fs_sb_info *sbi)
@@ -314,6 +333,7 @@ run_zoned_meta_tests(struct f2fs_sb_info *sbi)
     // clearing this flag for testing
 	clear_sbi_flag(sbi, SBI_POR_DOING);
 
+#if 0
     i = 0;
     while (tests[i] != NULL) {
         test_handle.err = 0;   
@@ -327,6 +347,11 @@ run_zoned_meta_tests(struct f2fs_sb_info *sbi)
         }
         i++;
     }
+#endif
+
+    can_calculate_segno(&test_handle);
+    
+    ret = -1;
 
     // reenable
 	set_sbi_flag(sbi, SBI_POR_DOING);
