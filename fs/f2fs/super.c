@@ -1591,11 +1591,11 @@ static void f2fs_put_super(struct super_block *sb)
 	iput(sbi->node_inode);
 	sbi->node_inode = NULL;
 
+    iput(sbi->mm_inode);
+    sbi->mm_inode = NULL;
+
 	iput(sbi->meta_inode);
 	sbi->meta_inode = NULL;
-
-  iput(sbi->mm_inode);
-  sbi->mm_inode = NULL;
 
 	/*
 	 * iput() can update stat information, if f2fs_write_checkpoint()
