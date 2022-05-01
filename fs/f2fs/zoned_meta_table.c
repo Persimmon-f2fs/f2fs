@@ -19,7 +19,6 @@ copy_data_from_ssd(struct f2fs_sb_info *sbi, u32 *dest, u32 start_blk, u32 read_
     copy_idx = 0;
     blk = start_blk;
     for (blk = start_blk; blk < start_blk + blk_count; ++blk) {
-        printk("reading: %u\n", blk);
         blk_page = f2fs_get_meta_page(sbi, blk);
         if (IS_ERR(blk_page)) {
             err = PTR_ERR(blk_page);
@@ -49,10 +48,6 @@ read_mm_info_state(struct f2fs_sb_info *sbi, block_t cp_addr)
     bit_block = cp_addr + le32_to_cpu(cp->cp_pack_start_meta_bit);
     bitmap_block = cp_addr + le32_to_cpu(cp->cp_pack_start_meta_bitmap);
 
-    printk("F2FS_BAT_SIZE: %u\n", F2FS_BAT_SIZE(sbi));
-    printk("F2FS_BIT_SIZE: %u\n", F2FS_BIT_SIZE(sbi));
-    printk("F2FS_BITMAP_SIZE: %u\n", F2FS_BITMAP_SIZE(sbi));
-
     err = copy_data_from_ssd(sbi, mm_info->bat_addrs,
             bat_block, sizeof(block_t) * F2FS_BAT_SIZE(sbi));
     if (err) {
@@ -61,7 +56,7 @@ read_mm_info_state(struct f2fs_sb_info *sbi, block_t cp_addr)
     }
 
     err = copy_data_from_ssd(sbi, mm_info->block_information_table,
-            bit_block, sizeof(block_t) * F2FS_BIT_SIZE(sbi));
+            bit_block, F2FS_BIT_SIZE(sbi));
     if (err) {
         f2fs_err(sbi, "Could not read bit table");
         goto out;
@@ -110,20 +105,18 @@ mm_write_info(struct f2fs_sb_info *sbi, u32 start_blk)
     int err = 0;
     struct f2fs_mm_info *mmi = sbi->mm_info;
 
-    //printk("bat_blk: %lu\n", start_blk);
-    err = write_data_to_ssd(sbi, mmi->bat_addrs, start_blk, F2FS_BAT_SIZE(sbi));
+    
+    err = write_data_to_ssd(sbi, mmi->bat_addrs, start_blk, sizeof(u32) * F2FS_BAT_SIZE(sbi));
     if (err)
         goto out;
     start_blk += F2FS_BAT_BLOCKS(sbi);
 
-    //printk("bit_blk: %lu\n", start_blk);
     err = write_data_to_ssd(sbi, mmi->block_information_table, start_blk, F2FS_BIT_SIZE(sbi));
     if (err)
         goto out;
     start_blk += F2FS_BIT_BLOCKS(sbi);
 
-    //printk("bitmap_blk: %lu\n", start_blk);
-    err = write_data_to_ssd(sbi, mmi->section_bitmap, start_blk, F2FS_BITMAP_SIZE(sbi));
+    err = write_data_to_ssd(sbi, mmi->section_bitmap, start_blk, sizeof(u32) * F2FS_BITMAP_SIZE(sbi));
     if (err)
         goto out;
     start_blk += F2FS_BITMAP_BLOCKS(sbi);
@@ -155,7 +148,6 @@ recover_mm_info_state(struct f2fs_sb_info *sbi)
 
     current_secno = le32_to_cpu(ckpt->cur_meta_secno);
 
-    //printk(KERN_INFO"current_secno: %zu\n", current_secno);
 
     err = fetch_section_write_pointer(sbi, current_secno, &wp_block);
     if (err) {
@@ -163,7 +155,6 @@ recover_mm_info_state(struct f2fs_sb_info *sbi)
         return err;
     }
 
-    //printk(KERN_INFO"fetched write pointer\n");
 
     start_block = le32_to_cpu(ckpt->cur_meta_wp); 
     // TODO: read ahead meta pages
@@ -195,7 +186,6 @@ recover_mm_info_state(struct f2fs_sb_info *sbi)
        put_page(meta_page);
     }
 
-    //printk(KERN_INFO"start_block: %lu\n", start_block);
 
 
 
@@ -218,14 +208,11 @@ check_bat_addrs(struct f2fs_sb_info *sbi)
     for (cur_blk = first + BAT_CHUNK_SIZE; cur_blk <= last; ++cur_blk) {
         bat_addr = GET_BAT_ENTRY(sbi, cur_blk);
         if (bat_addr != BLOCK_UNALLOCATED) {
-             f2fs_err(sbi, "addr: (%u) has bat_addr: (%u)",
-                    cur_blk, bat_addr);
+//             f2fs_err(sbi, "addr: (%u) has bat_addr: (%u)",
+//                    cur_blk, bat_addr);
              break;
         }
     }
-
-    printk("first: %u\n", first);
-    printk("last: %u\n", last);
 }
 
 int
@@ -247,7 +234,7 @@ create_f2fs_mm_info(struct f2fs_sb_info *sbi, block_t cp_addr)
         goto error;
     }
 
-    bit_addrs = kmalloc(sizeof(block_t) * F2FS_BIT_SIZE(sbi), GFP_KERNEL);
+    bit_addrs = kmalloc(F2FS_BIT_SIZE(sbi), GFP_KERNEL);
     if (!bit_addrs) {
         err = -ENOMEM;
         goto error;
@@ -308,14 +295,11 @@ try_again:
     empty_secno = FIRST_META_SECNO(sbi);
     bound = FIRST_META_SECNO(sbi) + le32_to_cpu(fsb->section_count_meta);
 
-    //printk("iterating through sections\n");
     for (; empty_secno < bound; ++empty_secno) {
-        //printk("empty_secno: (%lu)\n", empty_secno);
         if (GET_SECTION_BITMAP(sbi, empty_secno) == SECTION_EMPTY) {
             goto got_it;
         }
     }
-    //printk("could not find an empty section, doing gc!\n");
 
     if (empty_secno >= bound) {
         err = -1;
@@ -329,7 +313,6 @@ try_again:
     }
 
 got_it:
-    //printk("found an empty section: %lu\n", empty_secno);
     // set the current bound
     mmi->current_secno = empty_secno; 
     mmi->current_wp = START_BLOCK_FROM_SEG0(sbi, GET_SEG_FROM_SEC(sbi, empty_secno));
@@ -361,18 +344,12 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
     u32 old_secno = 0, old_invalid_count = 0;
     int err = 0;
 
-    printk("lba: %lu\n", virt_page->index);
 
-    //printk("write_mapped_page\n");
-    //printk("current_wp + 2: %lu\n", mmi->current_wp);
-    //printk("curent_secno: %lu\n", mmi->current_secno);
-    //printk("start_blk: %lu\n", START_BLOCK_FROM_SEG0(sbi,
-                //GET_SEG_FROM_SEC(sbi, mmi->current_secno + 1)));
 
     if (mmi->current_wp >= START_BLOCK_FROM_SEG0(sbi,
                 GET_SEG_FROM_SEC(sbi, mmi->current_secno + 1))) {
-        //printk("need to select new zone!\n");
         // zone would be full! move to the next
+        f2fs_info(sbi, "Choosing next meta section");
         err = choose_next_secno(sbi);
         if (err)
             goto out;
@@ -381,12 +358,9 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
     // grab the latest bat entry for the respective lba
     lba = virt_page->index;
 
-    //printk("lba: %lu\n", lba);
 
     bat_addr = GET_BAT_ENTRY(sbi, lba);
     if (bat_addr != BLOCK_UNALLOCATED) {
-        //printk("not unallocated\n");
-        printk("bat_addr: %u\n", bat_addr);
         bat_page = f2fs_get_meta_page(sbi, bat_addr);
         if (IS_ERR(bat_page)) {
             err = PTR_ERR(data_page);
@@ -397,12 +371,10 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 
         // grab the latest bit entry for the respective secno
         old_phys_lba = MM_PHYS_ADDR(sbi, bat_mb, lba);
-        printk("invalid_count: %u\n", le32_to_cpu(bat_mb->invalid_count));
 
         if (old_phys_lba == BLOCK_UNALLOCATED) {
             old_invalid_count = 0;
         } else {
-            printk("old_phys_lba: %u\n", old_phys_lba);
             old_invalid_count = GET_BIT_ENTRY(sbi, GET_SEC_FROM_BLK(sbi, old_phys_lba));
         }
     } else {
@@ -435,12 +407,6 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 
     // update necessary metadata fields
     mb = page_address(meta_page);
-#if 0
-    memcpy(mb->bat_chunk, bat_mb->bat_chunk, BAT_CHUNK_SIZE * sizeof(u32));
-    
-    // note the blkaddr change
-    memcpy(mb->section_bitmap, mmi->section_bitmap, SECTION_BITMAP_SIZE * sizeof(u32));
-#endif
 
     // copy metadata
     memcpy(mb, bat_mb, sizeof(struct f2fs_meta_block));
@@ -455,7 +421,6 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
         SET_BIT_ENTRY(sbi, GET_SEC_FROM_BLK(sbi, old_phys_lba), old_invalid_count + 1); 
     }
 
-    //printk("meta_seg->indx: %lu\n", GET_SEC_FROM_BLK(sbi, meta_page->index));
     SET_SECTION_BITMAP(sbi, GET_SEC_FROM_BLK(sbi, meta_page->index), SECTION_NON_EMPTY);
     SET_BAT_ENTRY(sbi, lba, meta_page->index);
 
@@ -545,10 +510,8 @@ repeat:
     // If the block is currently unallocated, fill with 0's
      
     chunk_lba = GET_BAT_ENTRY(sbi, lba);
-    //printk("chunk_lba: %lu\n", chunk_lba);
     if (chunk_lba == BLOCK_UNALLOCATED) {
         // block is unallocated, so fill with 0s
-        //printk("bat is unallocated!\n");
         memset(page_address(virt_page), 0, PAGE_SIZE);
         return virt_page;
     } else {
@@ -560,7 +523,6 @@ repeat:
 
         phys_lba = MM_PHYS_ADDR(sbi, page_address(meta_page), lba);
         if (phys_lba == BLOCK_UNALLOCATED) {
-            //printk("block is unallocated\n");
             memset(page_address(virt_page), 0, PAGE_SIZE);
             f2fs_put_page(meta_page, true);
             return virt_page;
@@ -635,7 +597,6 @@ mm_migrate_page(struct f2fs_sb_info *sbi, block_t phys_blk, u32 lba)
     int err = 0;
     struct page *data_page = NULL, *virt_page = NULL;
 
-    printk("migrage_page lba: (%u)\n", lba);
     
     virt_page = __grab_mapped_page(sbi, lba, true);
     if (IS_ERR(virt_page)) {
@@ -677,14 +638,11 @@ mm_write_meta_page(struct page *page, struct writeback_control *wbc)
 	struct f2fs_sb_info *sbi = F2FS_P_SB(page);
     int err = 0;
 
-    // printk("mm_write_meta_page\n");
 
 	if (unlikely(f2fs_cp_error(sbi))) {
-        //printk("cp_error\n");
 		goto redirty_out;
     }
 	if (unlikely(is_sbi_flag_set(sbi, SBI_POR_DOING))) {
-        //printk("sbi_por_doing\n");
 		goto redirty_out;
     }
 
@@ -815,7 +773,6 @@ mm_garbage_collect_segment(struct f2fs_sb_info *sbi, block_t secno, u32 invalid_
         // account for case when previously unallocated?
         chunk_page = fetch_chunk_page(sbi, mb_old->lba);
         if (!chunk_page) {
-            //printk("supposed to be null? mb_old->lba: %lu\n", mb_old->lba);
             f2fs_put_page(meta_page, true);
             continue;
         }
@@ -891,7 +848,6 @@ mm_do_garbage_collection(struct f2fs_sb_info *sbi)
         } 
     }
 
-    //printk("max_secno: (%lu)\n", max_secno);
     target_secno = max_secno + FIRST_META_SECNO(sbi);
     err = mm_garbage_collect_segment(sbi, target_secno, max_invalid_blocks);
 
