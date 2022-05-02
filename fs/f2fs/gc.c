@@ -21,6 +21,7 @@
 #include "segment.h"
 #include "gc.h"
 #include "iostat.h"
+#include "zoned_meta_table.h"
 #include <trace/events/f2fs.h>
 
 static struct kmem_cache *victim_entry_slab;
@@ -144,6 +145,8 @@ do_gc:
 		/* if return value is not zero, no victim was selected */
 		if (f2fs_gc(sbi, sync_mode, !foreground, false, NULL_SEGNO))
 			wait_ms = gc_th->no_gc_sleep_time;
+
+        f2fs_info(sbi, "did gc!");
 
 		if (foreground)
 			wake_up_all(&gc_th->fggc_wq);
@@ -1622,8 +1625,8 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 
 			end_segno = segno - 1;
 			for (segno = start_segno; segno < end_segno; segno++) {
-				sum_page = find_get_page(META_MAPPING(sbi),
-						GET_SUM_BLOCK(sbi, segno));
+                sum_page = get_mapped_page(sbi,
+                    GET_SUM_BLOCK(sbi, segno), true);
 				f2fs_put_page(sum_page, 0);
 				f2fs_put_page(sum_page, 0);
 			}
@@ -1637,8 +1640,8 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 	for (segno = start_segno; segno < end_segno; segno++) {
 
 		/* find segment summary of victim */
-		sum_page = find_get_page(META_MAPPING(sbi),
-					GET_SUM_BLOCK(sbi, segno));
+        sum_page = get_mapped_page(sbi,
+                GET_SUM_BLOCK(sbi, segno), true);
 		f2fs_put_page(sum_page, 0);
 
 		if (get_valid_blocks(sbi, segno, false) == 0)
@@ -1714,6 +1717,8 @@ int f2fs_gc(struct f2fs_sb_info *sbi, bool sync,
 	unsigned long long last_skipped = sbi->skipped_atomic_files[FG_GC];
 	unsigned long long first_skipped;
 	unsigned int skipped_round = 0, round = 0;
+
+    f2fs_info(sbi, "Doing garbage collection!");
 
 	trace_f2fs_gc_begin(sbi->sb, sync, background,
 				get_pages(sbi, F2FS_DIRTY_NODES),
