@@ -153,6 +153,8 @@ do_gc:
 
 		trace_f2fs_background_gc(sbi->sb, wait_ms,
 				prefree_segments(sbi), free_segments(sbi));
+        f2fs_info(sbi, "wait_ms: (%u), prefree_segments: (%u), free_segments: (%u)",
+                wait_ms, prefree_segments(sbi), free_segments(sbi));
 
 		/* balancing f2fs's metadata periodically */
 		f2fs_balance_fs_bg(sbi, true);
@@ -160,6 +162,7 @@ next:
 		sb_end_write(sbi->sb);
 
 	} while (!kthread_should_stop());
+    f2fs_info(sbi, "exiting gc loop");
 	return 0;
 }
 
@@ -1627,7 +1630,7 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 			for (segno = start_segno; segno < end_segno; segno++) {
                 sum_page = get_mapped_page(sbi,
                     GET_SUM_BLOCK(sbi, segno), true);
-				f2fs_put_page(sum_page, 0);
+				f2fs_put_page(sum_page, 1);
 				f2fs_put_page(sum_page, 0);
 			}
 			return err;
@@ -1642,7 +1645,6 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 		/* find segment summary of victim */
         sum_page = get_mapped_page(sbi,
                 GET_SUM_BLOCK(sbi, segno), true);
-		f2fs_put_page(sum_page, 0);
 
 		if (get_valid_blocks(sbi, segno, false) == 0)
 			goto freed;
@@ -1688,7 +1690,7 @@ freed:
 		if (__is_large_section(sbi) && segno + 1 < end_segno)
 			sbi->next_victim_seg[gc_type] = segno + 1;
 skip:
-		f2fs_put_page(sum_page, 0);
+		f2fs_put_page(sum_page, 1);
 	}
 
 	if (submitted)
