@@ -4127,6 +4127,20 @@ out:
 	return ret;
 }
 
+static int f2fs_ioc_get_gc_stats(struct file *filp, unsigned long arg)
+{
+    struct f2fs_sb_info *sbi = F2FS_I_SB(file_inode(filp));
+    struct f2fs_gc_stats stats = {
+        .blocks_migrated = sbi->no_blocks_migrated,
+    };
+
+    if (copy_to_user((struct f2fs_gc_stats __user *)arg, &stats,
+                sizeof(stats)))
+        return -EFAULT;        
+
+    return 0;
+}
+
 static long __f2fs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	switch (cmd) {
@@ -4212,6 +4226,8 @@ static long __f2fs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return f2fs_ioc_decompress_file(filp, arg);
 	case F2FS_IOC_COMPRESS_FILE:
 		return f2fs_ioc_compress_file(filp, arg);
+    case F2FS_IOC_GET_GC_STATS:
+        return f2fs_ioc_get_gc_stats(filp, arg);
 	default:
 		return -ENOTTY;
 	}

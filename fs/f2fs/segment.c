@@ -1872,6 +1872,10 @@ static int __f2fs_issue_discard_zone(struct f2fs_sb_info *sbi,
 			return -EIO;
 		}
 		trace_f2fs_issue_reset_zone(bdev, blkstart);
+
+        /* increment the number of blocks migrated */
+        sbi->no_blocks_migrated += GET_ZONE_FROM_SEC(
+                sbi, GET_SEC_FROM_BLK(sbi, blklen));
 		return blkdev_zone_mgmt(bdev, REQ_OP_ZONE_RESET,
 					sector, nr_sects, GFP_NOFS);
 	}

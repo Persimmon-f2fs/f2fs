@@ -146,7 +146,9 @@ do_gc:
 		if (f2fs_gc(sbi, sync_mode, !foreground, false, NULL_SEGNO))
 			wait_ms = gc_th->no_gc_sleep_time;
 
-        f2fs_info(sbi, "did gc!");
+        f2fs_info(sbi, "did gc! # migrated blocks: (%llu), # reset zones: (%llu)",
+                sbi->no_blocks_migrated,
+                sbi->no_zones_reset);
 
 		if (foreground)
 			wake_up_all(&gc_th->fggc_wq);
@@ -1179,6 +1181,7 @@ static int move_data_block(struct inode *inode, block_t bidx,
 		.in_list = false,
 		.retry = false,
 	};
+    struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	struct dnode_of_data dn;
 	struct f2fs_summary sum;
 	struct node_info ni;
@@ -1313,6 +1316,8 @@ static int move_data_block(struct inode *inode, block_t bidx,
 		goto put_page_out;
 	}
 
+    sbi->no_blocks_migrated += 1;
+
 	f2fs_update_iostat(fio.sbi, FS_GC_DATA_IO, F2FS_BLKSIZE);
 
 	f2fs_update_data_blkaddr(&dn, newaddr);
@@ -1340,6 +1345,7 @@ static int move_data_page(struct inode *inode, block_t bidx, int gc_type,
 {
 	struct page *page;
 	int err = 0;
+    struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 
 	page = f2fs_get_lock_data_page(inode, bidx, true);
 	if (IS_ERR(page))
@@ -1407,6 +1413,9 @@ retry:
 			if (is_dirty)
 				set_page_dirty(page);
 		}
+
+        /* increment the number of blocks migrated */
+        sbi->no_blocks_migrated += 1;
 	}
 out:
 	f2fs_put_page(page, 1);

@@ -42,6 +42,8 @@
 						struct f2fs_comp_option)
 #define F2FS_IOC_DECOMPRESS_FILE	_IO(F2FS_IOCTL_MAGIC, 23)
 #define F2FS_IOC_COMPRESS_FILE		_IO(F2FS_IOCTL_MAGIC, 24)
+#define F2FS_IOC_GET_GC_STATS       _IOR(F2FS_IOCTL_MAGIC, 25, \
+                        struct f2fs_gc_stats)
 
 /*
  * should be same as XFS_IOC_GOINGDOWN.
@@ -93,6 +95,10 @@ struct f2fs_sectrim_range {
 struct f2fs_comp_option {
 	__u8 algorithm;
 	__u8 log_cluster_size;
+};
+
+struct f2fs_gc_stats {
+    __u64 blocks_migrated;
 };
 
 #endif /* _UAPI_LINUX_F2FS_H */

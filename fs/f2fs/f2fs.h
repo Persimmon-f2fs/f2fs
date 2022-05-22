@@ -1853,6 +1853,10 @@ struct f2fs_sb_info {
 	spinlock_t iostat_lat_lock;
 	struct iostat_lat_info *iostat_io_lat;
 #endif
+
+    /* For GC migration statistics */
+    unsigned long long no_blocks_migrated;
+    unsigned long long no_zones_reset;
 };
 
 #ifdef CONFIG_F2FS_FAULT_INJECTION

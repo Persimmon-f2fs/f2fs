@@ -1078,6 +1078,8 @@ int btrfs_reset_device_zone(struct btrfs_device *device, u64 physical,
 {
 	int ret;
 
+    // TODO: add zone reset consideration here
+
 	*bytes = 0;
 	ret = blkdev_zone_mgmt(device->bdev, REQ_OP_ZONE_RESET,
 			       physical >> SECTOR_SHIFT, length >> SECTOR_SHIFT,
