@@ -431,6 +431,8 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
     f2fs_wait_on_page_writeback(data_page, META, true, true);
     f2fs_wait_on_page_writeback(meta_page, META, true, true);
 
+    clear_page_dirty_for_io(virt_page);
+
     //DUMP_BITMAP(sbi);
 
     // mark the change
@@ -597,7 +599,6 @@ mm_migrate_page(struct f2fs_sb_info *sbi, block_t phys_blk, u32 lba)
     int err = 0;
     struct page *data_page = NULL, *virt_page = NULL;
 
-    
     virt_page = __grab_mapped_page(sbi, lba, true);
     if (IS_ERR(virt_page)) {
         err = PTR_ERR(virt_page);
@@ -611,8 +612,6 @@ mm_migrate_page(struct f2fs_sb_info *sbi, block_t phys_blk, u32 lba)
         goto put_virt_page;
     }
 
-
-    f2fs_put_page(virt_page, true);
     f2fs_put_page(data_page, true);
 
     // copy the data from phys page to virt page
@@ -621,6 +620,8 @@ mm_migrate_page(struct f2fs_sb_info *sbi, block_t phys_blk, u32 lba)
     if (err) {
         f2fs_err(sbi, "Failed to migrate page");
     }
+
+    f2fs_put_page(virt_page, true);
 
     return err;
 
@@ -707,7 +708,8 @@ mm_write_gc_end(struct f2fs_sb_info *sbi, unsigned int secno)
     struct f2fs_mm_info *mmi = sbi->mm_info;
     struct f2fs_meta_block *mb = NULL;
     int err = 0;
-    if (mmi->current_wp + 2 >= START_BLOCK_FROM_SEG0(sbi, GET_SEG_FROM_SEC(sbi, mmi->current_secno + 1))) {
+    if (mmi->current_wp + 2 >= START_BLOCK_FROM_SEG0(
+                sbi, GET_SEG_FROM_SEC(sbi, mmi->current_secno + 1))) {
         // zone would be full! move to the next
         err = choose_next_secno(sbi);
         if (err)
@@ -819,9 +821,6 @@ mm_garbage_collect_segment(struct f2fs_sb_info *sbi, block_t secno, u32 invalid_
     // write a message indicating gc completed on this 
     err = mm_write_gc_end(sbi, GET_SEC_FROM_BLK(sbi, blkstart));
 
-    return err;
-
-    f2fs_put_page(meta_page, true);
 out:
     return err;
 }
@@ -839,6 +838,8 @@ mm_do_garbage_collection(struct f2fs_sb_info *sbi)
     // scan the bit for the entry with the largest number of invalid blocks
     down_write(&mmi->mmi_lock);
 
+    f2fs_info(sbi, "Starting meta gc!");
+
     max_secno = 0;
     max_invalid_blocks = mmi->block_information_table[0];
     for (i = 1; i < F2FS_BIT_SIZE(sbi); ++i) {
@@ -850,6 +851,8 @@ mm_do_garbage_collection(struct f2fs_sb_info *sbi)
 
     target_secno = max_secno + FIRST_META_SECNO(sbi);
     err = mm_garbage_collect_segment(sbi, target_secno, max_invalid_blocks);
+
+    f2fs_info(sbi, "finished meta gc!");
 
     up_write(&mmi->mmi_lock);
     return err;
