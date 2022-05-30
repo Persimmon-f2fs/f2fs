@@ -852,6 +852,8 @@ out:
 				prefree_segments(sbi), free_segments(sbi));
 	mutex_unlock(&dirty_i->seglist_lock);
 
+    f2fs_info(sbi, "alloc mode: %d\n", p.alloc_mode);
+
 	return ret;
 }
 
@@ -928,6 +930,8 @@ static int gc_node_segment(struct f2fs_sb_info *sbi,
 	unsigned int usable_blks_in_seg = f2fs_usable_blks_in_seg(sbi, segno);
 
 	start_addr = START_BLOCK(sbi, segno);
+
+    f2fs_info(sbi, "gc_node_segment");
 
 next_step:
 	entry = sum;
@@ -1443,6 +1447,8 @@ static int gc_data_segment(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 
 	start_addr = START_BLOCK(sbi, segno);
 
+    f2fs_info(sbi, "gc_data_segment");
+
 next_step:
 	entry = sum;
 
@@ -1637,9 +1643,10 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 
 			end_segno = segno - 1;
 			for (segno = start_segno; segno < end_segno; segno++) {
-                sum_page = get_mapped_page(sbi,
-                    GET_SUM_BLOCK(sbi, segno), true);
-				f2fs_put_page(sum_page, 1);
+                sum_page = find_get_page(META_MAPPED_MAPPING(sbi),
+                        GET_SUM_BLOCK(sbi, segno));
+
+				f2fs_put_page(sum_page, 0);
 				f2fs_put_page(sum_page, 0);
 			}
 			return err;
@@ -1652,8 +1659,8 @@ static int do_garbage_collect(struct f2fs_sb_info *sbi,
 	for (segno = start_segno; segno < end_segno; segno++) {
 
 		/* find segment summary of victim */
-        sum_page = get_mapped_page(sbi,
-                GET_SUM_BLOCK(sbi, segno), true);
+        sum_page = find_get_page(META_MAPPED_MAPPING(sbi),
+                GET_SUM_BLOCK(sbi, segno));
 
 		if (get_valid_blocks(sbi, segno, false) == 0)
 			goto freed;
@@ -1699,7 +1706,7 @@ freed:
 		if (__is_large_section(sbi) && segno + 1 < end_segno)
 			sbi->next_victim_seg[gc_type] = segno + 1;
 skip:
-		f2fs_put_page(sum_page, 1);
+		f2fs_put_page(sum_page, 0);
 	}
 
 	if (submitted)
@@ -1778,6 +1785,8 @@ gc_more:
 	if (ret)
 		goto stop;
 
+    f2fs_info(sbi, "victim: %d", segno);
+
 	seg_freed = do_garbage_collect(sbi, segno, &gc_list, gc_type, force);
 	if (gc_type == FG_GC &&
 		seg_freed == f2fs_usable_segs_in_sec(sbi, segno))
@@ -1819,6 +1828,7 @@ stop:
 	SIT_I(sbi)->last_victim[ALLOC_NEXT] = 0;
 	SIT_I(sbi)->last_victim[FLUSH_DEVICE] = init_segno;
 
+
 	trace_f2fs_gc_end(sbi->sb, ret, total_freed, sec_freed,
 				get_pages(sbi, F2FS_DIRTY_NODES),
 				get_pages(sbi, F2FS_DIRTY_DENTS),
@@ -1834,6 +1844,7 @@ stop:
 
 	if (sync && !ret)
 		ret = sec_freed ? 0 : -EAGAIN;
+    f2fs_info(sbi, "did gc!");
 	return ret;
 }
 

@@ -218,6 +218,8 @@ grab_mapped_page(struct f2fs_sb_info *sbi, block_t lba, bool for_write);
 void
 update_mapped_page(struct f2fs_sb_info *sbi, void *src, block_t blk_addr);
 
+int
+mm_write_meta_page(struct page *page, struct writeback_control *wbc);
 
 extern const struct address_space_operations f2fs_mm_aops;
 

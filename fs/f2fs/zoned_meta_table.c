@@ -344,8 +344,6 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
     u32 old_secno = 0, old_invalid_count = 0;
     int err = 0;
 
-
-
     if (mmi->current_wp >= START_BLOCK_FROM_SEG0(sbi,
                 GET_SEG_FROM_SEC(sbi, mmi->current_secno + 1))) {
         // zone would be full! move to the next
@@ -428,6 +426,9 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
     set_page_dirty(data_page);
     set_page_dirty(meta_page);
 
+    //f2fs_do_write_meta_page(sbi, data_page, FS_META_IO);
+    //f2fs_do_write_meta_page(sbi, meta_page, FS_META_IO);
+
     f2fs_wait_on_page_writeback(data_page, META, true, true);
     f2fs_wait_on_page_writeback(meta_page, META, true, true);
 
@@ -483,13 +484,59 @@ grab_mapped_page(struct f2fs_sb_info *sbi, u32 lba, bool for_write)
     return __grab_mapped_page(sbi, lba, for_write);
 }
 
+static int
+read_phys_pages(struct f2fs_sb_info *sbi, struct page *virt_page)
+{
+    int err = 0;
+    block_t lba, chunk_lba, phys_lba;
+    struct page *meta_page, *phys_page;
+
+    lba = virt_page->index;
+
+    chunk_lba = GET_BAT_ENTRY(sbi, lba);
+    if (chunk_lba == BLOCK_UNALLOCATED) {
+        // block is unallocated, so fill with 0s
+        memset(page_address(virt_page), 0, PAGE_SIZE);
+        return 0;
+    } else {
+        meta_page = f2fs_get_meta_page(sbi, chunk_lba);
+        if (IS_ERR(meta_page)) {
+            f2fs_err(sbi, "Could not grab meta page");
+            return PTR_ERR(meta_page);
+        }
+
+        phys_lba = MM_PHYS_ADDR(sbi, page_address(meta_page), lba);
+        if (phys_lba == BLOCK_UNALLOCATED) {
+            memset(page_address(virt_page), 0, PAGE_SIZE);
+            f2fs_put_page(meta_page, true);
+            return 0;
+        }
+
+        phys_page = f2fs_get_meta_page(sbi, phys_lba);
+        if (IS_ERR(phys_page)) {
+            f2fs_err(sbi, "Could not grab phys page");
+            f2fs_put_page(meta_page, true);
+            return PTR_ERR(phys_page);
+        }
+
+        // copy phys_page -> virt_page
+        memcpy(page_address(virt_page), page_address(phys_page), PAGE_SIZE);
+
+
+        f2fs_put_page(phys_page, true);
+        f2fs_put_page(meta_page, true);
+
+        return err;
+    }
+}
+
 // assumed to be called under write or read lock
 static struct page *
 __get_mapped_page(struct f2fs_sb_info *sbi, u32 lba, bool for_write)
 {
-    struct page *virt_page = NULL, *meta_page = NULL, *phys_page = NULL;
+    struct page *virt_page = NULL;
     struct address_space *mma = META_MAPPED_MAPPING(sbi);
-    u32 chunk_lba = 0, phys_lba = 0;
+    int err = 0;
 
     // when we grab the page, if it was created, then we need to read from disk
     // always read the physical page for now
@@ -502,7 +549,7 @@ repeat:
     }
     if (IS_ERR(virt_page)) {
         f2fs_err(sbi, "Could not grab meta page");
-        goto error;
+        goto out;
     }
     if (PageUptodate(virt_page)) {
         goto out;
@@ -510,45 +557,25 @@ repeat:
 
     // grab the physical page by looking up the chunk address
     // If the block is currently unallocated, fill with 0's
-     
-    chunk_lba = GET_BAT_ENTRY(sbi, lba);
-    if (chunk_lba == BLOCK_UNALLOCATED) {
-        // block is unallocated, so fill with 0s
-        memset(page_address(virt_page), 0, PAGE_SIZE);
-        return virt_page;
-    } else {
-        meta_page = f2fs_get_meta_page(sbi, chunk_lba);
-        if (IS_ERR(meta_page)) {
-            f2fs_err(sbi, "Could not grab meta page");
-            goto put_virt_page;
-        }
+         
+    err = read_phys_pages(sbi, virt_page);
+    if (err) {
+        f2fs_info(sbi, "reading phys pages failed.");
+        f2fs_put_page(virt_page, true);
+        return ERR_PTR(err);
+    }
 
-        phys_lba = MM_PHYS_ADDR(sbi, page_address(meta_page), lba);
-        if (phys_lba == BLOCK_UNALLOCATED) {
-            memset(page_address(virt_page), 0, PAGE_SIZE);
-            f2fs_put_page(meta_page, true);
-            return virt_page;
-        }
+    if (unlikely(virt_page->mapping != mma)) {
+        f2fs_info(sbi, "virt page mapping not the same as mma");
+        f2fs_put_page(virt_page, 1);
+        goto repeat;
+    }
 
-        phys_page = f2fs_get_meta_page(sbi, phys_lba);
-        if (IS_ERR(phys_page)) {
-            f2fs_err(sbi, "Could not grab phys page");
-            goto put_virt_page;
-        }
-
-        // copy phys_page -> virt_page
-        memcpy(page_address(virt_page), page_address(phys_page), PAGE_SIZE);
-        f2fs_put_page(phys_page, true);
-        f2fs_put_page(meta_page, true);
+    // should be safe to do this here?
+    SetPageUptodate(virt_page);
 
 out:
-        return virt_page;
-        f2fs_put_page(meta_page, true);
-put_virt_page:
-        f2fs_put_page(virt_page, true);
-error:
-        return NULL;
-    }
+    return virt_page;
 }
 
 struct page *
@@ -587,7 +614,7 @@ update_mapped_page(struct f2fs_sb_info *sbi, void *src, block_t blk_addr)
 {
 	struct page *page = grab_mapped_page(sbi, blk_addr, true);
 
-	memcpy(page_address(page), src, PAGE_SIZE);
+	memcpy(page_address(page), src, F2FS_BLKSIZE);
 	set_page_dirty(page);
 	f2fs_put_page(page, 1);
 }
@@ -633,12 +660,11 @@ out:
 
 
 
-static int
+int
 mm_write_meta_page(struct page *page, struct writeback_control *wbc)
 {
 	struct f2fs_sb_info *sbi = F2FS_P_SB(page);
     int err = 0;
-
 
 	if (unlikely(f2fs_cp_error(sbi))) {
 		goto redirty_out;
