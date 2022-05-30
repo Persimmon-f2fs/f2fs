@@ -852,8 +852,6 @@ out:
 				prefree_segments(sbi), free_segments(sbi));
 	mutex_unlock(&dirty_i->seglist_lock);
 
-    f2fs_info(sbi, "alloc mode: %d\n", p.alloc_mode);
-
 	return ret;
 }
 
@@ -931,7 +929,6 @@ static int gc_node_segment(struct f2fs_sb_info *sbi,
 
 	start_addr = START_BLOCK(sbi, segno);
 
-    f2fs_info(sbi, "gc_node_segment");
 
 next_step:
 	entry = sum;
@@ -1447,7 +1444,6 @@ static int gc_data_segment(struct f2fs_sb_info *sbi, struct f2fs_summary *sum,
 
 	start_addr = START_BLOCK(sbi, segno);
 
-    f2fs_info(sbi, "gc_data_segment");
 
 next_step:
 	entry = sum;
@@ -1736,7 +1732,6 @@ int f2fs_gc(struct f2fs_sb_info *sbi, bool sync,
 	unsigned long long first_skipped;
 	unsigned int skipped_round = 0, round = 0;
 
-    f2fs_info(sbi, "Doing garbage collection!");
 
 	trace_f2fs_gc_begin(sbi->sb, sync, background,
 				get_pages(sbi, F2FS_DIRTY_NODES),
@@ -1785,7 +1780,6 @@ gc_more:
 	if (ret)
 		goto stop;
 
-    f2fs_info(sbi, "victim: %d", segno);
 
 	seg_freed = do_garbage_collect(sbi, segno, &gc_list, gc_type, force);
 	if (gc_type == FG_GC &&
@@ -1844,7 +1838,6 @@ stop:
 
 	if (sync && !ret)
 		ret = sec_freed ? 0 : -EAGAIN;
-    f2fs_info(sbi, "did gc!");
 	return ret;
 }
 
