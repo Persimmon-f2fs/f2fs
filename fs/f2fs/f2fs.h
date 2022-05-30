@@ -4579,5 +4579,6 @@ int f2fs_issue_discard(struct f2fs_sb_info *sbi,
 void dump_node_count(struct f2fs_sb_info *sbi);
 int zoned_cp_next_start(struct f2fs_sb_info *sbi,
         block_t *next_start, u32 write_size_blocks);
+long f2fs_sync_meta_mapped_pages(struct f2fs_sb_info *sbi, enum page_type type, long nr_to_write, enum iostat_type io_type);
 
 #endif /* _LINUX_F2FS_H */

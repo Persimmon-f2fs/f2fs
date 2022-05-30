@@ -380,7 +380,7 @@ skip_write:
 }
 
 long f2fs_sync_meta_pages(struct f2fs_sb_info *sbi, enum page_type type,
-				long nr_to_write, enum iostat_type io_type)
+        long nr_to_write, enum iostat_type io_type)
 {
 	struct address_space *mapping = META_MAPPING(sbi);
 	pgoff_t index = 0, prev = ULONG_MAX;
@@ -446,6 +446,68 @@ stop:
 	blk_finish_plug(&plug);
 
 	return nwritten;
+}
+
+long f2fs_sync_meta_mapped_pages(struct f2fs_sb_info *sbi, enum page_type type,
+				long nr_to_write, enum iostat_type io_type)
+{
+	struct address_space *mapping = META_MAPPED_MAPPING(sbi);
+	pgoff_t index = 0, prev = ULONG_MAX;
+	struct pagevec pvec;
+	long nwritten = 0;
+	int nr_pages;
+	struct writeback_control wbc = {
+		.for_reclaim = 0,
+	};
+
+    pagevec_init(&pvec);
+
+    while ((nr_pages = pagevec_lookup_tag(&pvec, mapping, &index,
+                    PAGECACHE_TAG_DIRTY))) {
+        int i;
+        for (i = 0; i < nr_pages; ++i) {
+            struct page *page = pvec.pages[i];
+
+            if (prev == ULONG_MAX)
+                prev = page->index - 1;
+            if (nr_to_write != LONG_MAX && page->index != prev + 1) {
+                pagevec_release(&pvec);
+                goto stop;
+            }
+
+            lock_page(page);
+
+			if (unlikely(page->mapping != mapping)) {
+continue_unlock:
+				unlock_page(page);
+				continue;
+			}
+			if (!PageDirty(page)) {
+				/* someone wrote it for us */
+				goto continue_unlock;
+			}
+
+			f2fs_wait_on_page_writeback(page, META, true, true);
+
+			if (!clear_page_dirty_for_io(page))
+				goto continue_unlock;
+            
+            if (mm_write_meta_page(page, &wbc)) {
+                unlock_page(page);
+                break;
+            }
+
+            nwritten++;
+            prev = page->index;
+            if (unlikely(nwritten >= nr_to_write))
+                break;
+        }
+        pagevec_release(&pvec);
+        cond_resched();
+    }
+stop:
+    // sync possible cp / physical data
+    return nwritten;
 }
 
 static bool f2fs_dirty_meta_folio(struct address_space *mapping,
@@ -1460,6 +1522,7 @@ int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 #endif
 
 	/* Flush all the NAT/SIT pages */
+    f2fs_sync_meta_mapped_pages(sbi, META, LONG_MAX, FS_CP_META_IO);
 	f2fs_sync_meta_pages(sbi, META, LONG_MAX, FS_CP_META_IO);
 
 	/* start to update checkpoint, cp ver is already updated previously */
