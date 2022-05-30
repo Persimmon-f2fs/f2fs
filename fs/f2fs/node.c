@@ -150,7 +150,7 @@ static struct page *get_next_nat_page(struct f2fs_sb_info *sbi, nid_t nid)
 	src_page = get_current_nat_page(sbi, nid);
 	if (IS_ERR(src_page))
 		return src_page;
-  dst_page = grab_mapped_page(sbi, dst_off, true);
+    dst_page = grab_mapped_page(sbi, dst_off, true);
 	f2fs_bug_on(sbi, PageDirty(src_page));
 
 	src_addr = page_address(src_page);

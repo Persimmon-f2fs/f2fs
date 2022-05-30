@@ -332,7 +332,13 @@ static void f2fs_write_end_io(struct bio *bio)
 #endif
 
 		if (unlikely(bio->bi_status)) {
-			mapping_set_error(page->mapping, -EIO);
+            if (!page) {
+                f2fs_err(sbi, "page is NULL?");
+            }
+            if (page->mapping) 
+                mapping_set_error(page->mapping, -EIO);
+            else
+                f2fs_err(sbi, "page mapping is NULL! lba: %lu", page->index);
 			if (type == F2FS_WB_CP_DATA)
 				f2fs_stop_checkpoint(sbi, true);
 		}
