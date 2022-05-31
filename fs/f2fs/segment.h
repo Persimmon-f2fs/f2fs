@@ -102,7 +102,6 @@ static inline void sanity_check_seg_type(struct f2fs_sb_info *sbi,
 		GET_SEGNO_FROM_SEG0(sbi, blk_addr)))
 #define START_BLOCK_FROM_SEG0(sbi, segno)   \
   ((((segno) <<  (sbi)->log_blocks_per_seg)) + SEG0_BLKADDR(sbi))
- //((segno) << (sbi)->log_blocks_per_seg)
 #define BLKS_PER_SEC(sbi)					\
 	((sbi)->segs_per_sec * (sbi)->blocks_per_seg)
 #define GET_SEC_FROM_SEG(sbi, segno)				\
