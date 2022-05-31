@@ -155,16 +155,18 @@ recover_mm_info_state(struct f2fs_sb_info *sbi)
         return err;
     }
 
-
     start_block = le32_to_cpu(ckpt->cur_meta_wp); 
     // TODO: read ahead meta pages
+    
+    f2fs_info(sbi, "start_block: %u, wp_block: %u", start_block, wp_block);
+
 
     // iterate through all blocks from current offset to write pointer
     // iterate two at a time since the actual meta block is the block
     // adjacent to the (meta) data
     start_block += 1;
     for (; start_block < wp_block; start_block += 2) {
-       meta_page = f2fs_get_meta_page_retry(sbi, start_block);
+       meta_page = f2fs_get_meta_page(sbi, start_block);
        if (IS_ERR(meta_page)) {
            f2fs_err(sbi, "Could not read meta_page");
            err = PTR_ERR(meta_page);
@@ -186,12 +188,11 @@ recover_mm_info_state(struct f2fs_sb_info *sbi)
        put_page(meta_page);
     }
 
-
-
-
     // also set the wp
     sbi->mm_info->current_secno = current_secno;
     sbi->mm_info->current_wp = wp_block;
+
+    f2fs_info(sbi, "current_secno: %u, current_wp: %u", current_secno, wp_block);
 
     return err;
 }
@@ -288,38 +289,44 @@ choose_next_secno(struct f2fs_sb_info *sbi)
 { 
     struct f2fs_super_block *fsb = F2FS_RAW_SUPER(sbi);
     struct f2fs_mm_info *mmi = sbi->mm_info;
-    unsigned int empty_secno = 0, bound = 0;
+    unsigned int empty_secno = 0, selected_secno = 0, bound = 0, number_empty = 0;
     int err = 0;
 
 try_again:
     empty_secno = FIRST_META_SECNO(sbi);
-    bound = FIRST_META_SECNO(sbi) + le32_to_cpu(fsb->section_count_meta);
+
+    bound = FIRST_META_SECNO(sbi) + (le32_to_cpu(fsb->section_count_meta));
+    number_empty = le32_to_cpu(fsb->section_count_meta);
+
+    f2fs_info(sbi, "empty_secno: %u, bound: %u", empty_secno, bound);
+    f2fs_info(sbi, "bound blkaddr: %u", START_BLOCK_FROM_SEG0(sbi, GET_SEG_FROM_SEC(sbi, bound)));
 
     for (; empty_secno < bound; ++empty_secno) {
         if (GET_SECTION_BITMAP(sbi, empty_secno) == SECTION_EMPTY) {
-            goto got_it;
+            selected_secno = empty_secno;
+            number_empty++;
         }
     }
 
-    if (empty_secno >= bound) {
-        err = -1;
-        goto out;
+    // set the current bound
+    mmi->current_secno = selected_secno; 
+    mmi->current_wp = START_BLOCK_FROM_SEG0(sbi, GET_SEG_FROM_SEC(sbi, selected_secno));
+    SET_SECTION_BITMAP(sbi, selected_secno, SECTION_NON_EMPTY);
+    f2fs_info(sbi, "Chose next meta section. current_secno: %u, current_wp: %u",
+            mmi->current_secno, mmi->current_wp);
+
+    if (number_empty == 1) {
         err = mm_do_garbage_collection(sbi);
         if (err) {
-            f2fs_err(sbi, "Could not perform garbage collection. Is something configured wrong?");
-            goto out;
+            f2fs_err(sbi, "Could not perform garbage collection.");
         }
         goto try_again;
+    } else if (number_empty == 0) {
+        f2fs_err(sbi, "all sections were filled.");
+        err = -1;
     }
 
-got_it:
-    // set the current bound
-    mmi->current_secno = empty_secno; 
-    mmi->current_wp = START_BLOCK_FROM_SEG0(sbi, GET_SEG_FROM_SEC(sbi, empty_secno));
-    SET_SECTION_BITMAP(sbi, empty_secno, SECTION_NON_EMPTY);
-
     // TODO: initiate checkpoint procedure
-out:
     return err;
 }
 // assumed to be called under a lock, either shared or writer
@@ -347,7 +354,6 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
     if (mmi->current_wp >= START_BLOCK_FROM_SEG0(sbi,
                 GET_SEG_FROM_SEC(sbi, mmi->current_secno + 1))) {
         // zone would be full! move to the next
-        f2fs_info(sbi, "Choosing next meta section");
         err = choose_next_secno(sbi);
         if (err)
             goto out;

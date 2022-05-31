@@ -73,9 +73,7 @@ static inline bool IS_VALID_META_BLKADDR(struct f2fs_sb_info *sbi, u32 meta_addr
     bool valid = false;
     valid = (meta_addr >= le32_to_cpu(F2FS_RAW_SUPER(sbi)->sit_blkaddr) &&
                meta_addr <= le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr));
-    if (!valid) {
-        printk("invalid meta_addr: %u\n", meta_addr);
-    }
+    f2fs_bug_on(sbi, !valid);
     return valid;
 }
 

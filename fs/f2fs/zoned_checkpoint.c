@@ -68,7 +68,8 @@ int zoned_cp_next_start(struct f2fs_sb_info *sbi, block_t *next_start, u32 write
 {
     block_t start_addr = le32_to_cpu(F2FS_RAW_SUPER(sbi)->cp_blkaddr);
     int err, devi;
-
+    u32 end_segno, start_segno;
+    block_t last_addr;
 
     if (sbi->cur_cp_pack == 1) { 
         start_addr += (sbi->segs_per_sec * sbi->blocks_per_seg);
@@ -76,16 +77,21 @@ int zoned_cp_next_start(struct f2fs_sb_info *sbi, block_t *next_start, u32 write
 
     err = __fetch_wp(sbi, start_addr, next_start);
     if (err)
-        return err;
+        goto out;
 
-    if (*next_start + write_size_blocks >= (sbi->segs_per_sec * sbi->blocks_per_seg) + start_addr) {
-        // discard this zone, since this write would leak to the next zone
-        printk("\n=== clearing zone ===\n");
+    start_segno = GET_SEGNO_FROM_SEG0(sbi, start_addr);
+    end_segno = start_segno + f2fs_usable_segs_in_sec(sbi, start_segno);
+    last_addr = START_BLOCK_FROM_SEG0(sbi, end_segno);
+
+
+    if (start_addr + write_size_blocks >= last_addr) {
+        f2fs_info(sbi, "clearing zone for checkpoint!");
         devi = f2fs_target_device_index(sbi, start_addr);
         err = f2fs_issue_discard_zone(sbi, start_addr, sbi->segs_per_sec * sbi->blocks_per_seg);
         *next_start = start_addr;
     }
 
+out:
     return err;
 }
 
@@ -181,7 +187,9 @@ int zoned_get_valid_checkpoint(struct f2fs_sb_info *sbi, block_t *cp_addr)
 	 */
     // The change here is that the start_blk_no needs to be based off of a wp
 
-    __fetch_last_block(sbi, CP_ZONE_ID(sbi, 1), &cp_start_blk_no);
+    __fetch_last_block(sbi,
+            START_BLOCK_FROM_SEG0(sbi, GET_SEG_FROM_SEC(sbi, 0)),
+            &cp_start_blk_no);
 
     //printk(KERN_INFO "first zone_id: %u\n", CP_ZONE_ID(sbi, 1));
     printk(KERN_INFO "1st write_pointer: %u\n", cp_start_blk_no);
@@ -189,7 +197,9 @@ int zoned_get_valid_checkpoint(struct f2fs_sb_info *sbi, block_t *cp_addr)
 	cp1 = zoned_validate_checkpoint(sbi, cp_start_blk_no, &cp1_version);
 
 	/* The second checkpoint pack should start at the next zone */
-    __fetch_last_block(sbi, CP_ZONE_ID(sbi, 2), &cp_start_blk_no);
+    __fetch_last_block(sbi,
+            START_BLOCK_FROM_SEG0(sbi, GET_SEG_FROM_SEC(sbi, 1)),
+            &cp_start_blk_no);
 
 
     //printk(KERN_INFO "second zone_id: %u\n", CP_ZONE_ID(sbi, 2));
@@ -207,7 +217,7 @@ int zoned_get_valid_checkpoint(struct f2fs_sb_info *sbi, block_t *cp_addr)
 	} else if (cp2) {
 		cur_page = cp2;
 	} else {
-        //printk(KERN_INFO "None of the checkpoints are valid!\n");
+        f2fs_err(sbi, "None of the checkpoints are valid!\n");
 		err = -EFSCORRUPTED;
 		goto fail_no_cp;
 	}
@@ -256,6 +266,7 @@ int zoned_get_valid_checkpoint(struct f2fs_sb_info *sbi, block_t *cp_addr)
 
 		cur_page = f2fs_get_meta_page(sbi, cp_blk_no + i);
 		if (IS_ERR(cur_page)) {
+            f2fs_err(sbi, "could not get meta page");
 			err = PTR_ERR(cur_page);
 			goto free_fail_no_cp;
 		}
