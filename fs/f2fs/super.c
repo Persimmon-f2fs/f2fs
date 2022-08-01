@@ -3046,7 +3046,7 @@ static void f2fs_get_devices(struct super_block *sb,
 }
 
 static const struct fscrypt_operations f2fs_cryptops = {
-	.key_prefix		= "f2fs:",
+	.key_prefix		= "f2fs_mod:",
 	.get_context		= f2fs_get_context,
 	.set_context		= f2fs_set_context,
 	.get_dummy_policy	= f2fs_get_dummy_policy,
@@ -4609,16 +4609,16 @@ static void kill_f2fs_super(struct super_block *sb)
 
 static struct file_system_type f2fs_fs_type = {
 	.owner		= THIS_MODULE,
-	.name		= "f2fs",
+	.name		= "f2fs_mod",
 	.mount		= f2fs_mount,
 	.kill_sb	= kill_f2fs_super,
 	.fs_flags	= FS_REQUIRES_DEV | FS_ALLOW_IDMAP,
 };
-MODULE_ALIAS_FS("f2fs");
+MODULE_ALIAS_FS("f2fs_mod");
 
 static int __init init_inodecache(void)
 {
-	f2fs_inode_cachep = kmem_cache_create("f2fs_inode_cache",
+	f2fs_inode_cachep = kmem_cache_create("f2fs_mod_inode_cache",
 			sizeof(struct f2fs_inode_info), 0,
 			SLAB_RECLAIM_ACCOUNT|SLAB_ACCOUNT, NULL);
 	if (!f2fs_inode_cachep)
