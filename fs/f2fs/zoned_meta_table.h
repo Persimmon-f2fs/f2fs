@@ -181,7 +181,10 @@ static inline u32 MM_PHYS_ADDR(struct f2fs_sb_info *sbi, struct f2fs_meta_block 
     return le32_to_cpu(mb->bat_chunk[SLOT_IN_BAT(sbi, lba)]);
 }
 
-
+static inline block_t LAST_BLOCK_IN_SEC(struct f2fs_sb_info *sbi, u32 secno) {
+    return START_BLOCK_FROM_SEG0(sbi,
+        GET_SEG_FROM_SEC(sbi, secno)) + (f2fs_usable_segs_in_sec(sbi, secno) * sbi->blocks_per_seg);
+}
 
 static inline void DUMP_BITMAP(struct f2fs_sb_info *sbi) 
 {

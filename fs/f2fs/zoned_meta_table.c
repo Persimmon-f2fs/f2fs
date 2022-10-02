@@ -44,6 +44,8 @@ read_mm_info_state(struct f2fs_sb_info *sbi, block_t cp_addr)
     u32 bat_block, bit_block, bitmap_block;
     struct f2fs_mm_info *mm_info = sbi->mm_info;
 
+    f2fs_info(sbi, "reading meta state!!!");
+
     bat_block = cp_addr + le32_to_cpu(cp->cp_pack_start_meta_bat);
     bit_block = cp_addr + le32_to_cpu(cp->cp_pack_start_meta_bit);
     bitmap_block = cp_addr + le32_to_cpu(cp->cp_pack_start_meta_bitmap);
@@ -105,6 +107,7 @@ mm_write_info(struct f2fs_sb_info *sbi, u32 start_blk)
     int err = 0;
     struct f2fs_mm_info *mmi = sbi->mm_info;
 
+    f2fs_info(sbi, "write_mm_info. start_blk: %u", start_blk);
     
     err = write_data_to_ssd(sbi, mmi->bat_addrs, start_blk, sizeof(u32) * F2FS_BAT_SIZE(sbi));
     if (err)
@@ -219,7 +222,7 @@ check_bat_addrs(struct f2fs_sb_info *sbi)
 int
 create_f2fs_mm_info(struct f2fs_sb_info *sbi, block_t cp_addr)
 {
-    int err = 0;
+    int err = 0, j = 0;
     struct f2fs_mm_info *mm_info = NULL;
     block_t *bat_addrs = NULL, *bit_addrs = NULL;
 
@@ -240,6 +243,13 @@ create_f2fs_mm_info(struct f2fs_sb_info *sbi, block_t cp_addr)
         err = -ENOMEM;
         goto error;
     }
+
+    f2fs_info(sbi, "number of meta sections: %u", le32_to_cpu(F2FS_RAW_SUPER(sbi)->section_count_meta));
+    for (j = FIRST_META_SECNO(sbi); j < le32_to_cpu(F2FS_RAW_SUPER(sbi)->section_count_meta); ++j) {
+        f2fs_info(sbi, "section %d start %u", j, START_BLOCK_FROM_SEG0(sbi, GET_SEG_FROM_SEC(sbi, j)));
+        f2fs_info(sbi, "end: %u", LAST_BLOCK_IN_SEC(sbi, j));
+    }
+
 
     mm_info->bat_addrs = bat_addrs;
     mm_info->block_information_table = bit_addrs;
@@ -333,6 +343,7 @@ fetch_chunk_page(struct f2fs_sb_info *sbi, block_t lba)
     return f2fs_grab_meta_page(sbi, GET_BAT_ENTRY(sbi, lba));
 }
 
+
 // assumed to be called under write lock
 static int
 write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
@@ -345,8 +356,7 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
     u32 old_secno = 0, old_invalid_count = 0;
     int err = 0;
 
-    if (mmi->current_wp >= START_BLOCK_FROM_SEG0(sbi,
-                GET_SEG_FROM_SEC(sbi, mmi->current_secno + 1))) {
+    if (mmi->current_wp + 2 >= LAST_BLOCK_IN_SEC(sbi, mmi->current_secno)) {
         // zone would be full! move to the next
         err = choose_next_secno(sbi, false);
         if (err)
@@ -355,7 +365,6 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 
     // grab the latest bat entry for the respective lba
     lba = virt_page->index;
-
 
     bat_addr = GET_BAT_ENTRY(sbi, lba);
     if (bat_addr != BLOCK_UNALLOCATED) {
@@ -438,6 +447,9 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 
     // mark the change
     mmi->current_wp += 2;
+
+    // f2fs_info(sbi, "meta wp incremented! current_wp: %u", mmi->current_wp);
+
     
     f2fs_put_page(meta_page, true);
 put_data_page:
@@ -793,6 +805,8 @@ mm_garbage_collect_segment(struct f2fs_sb_info *sbi, block_t secno, u32 invalid_
     u32 blklen = 0, cur_blk = 0, nr_migrated = 0;     
     block_t blkstart = 0, chunk_blk;
     int err = 0;
+
+    f2fs_info(sbi, "starting garbage collect segment!");
 
     blkstart = START_BLOCK_FROM_SEG0(sbi, GET_SEG_FROM_SEC(sbi, secno));
     f2fs_info(sbi, "blkstart: %u", blkstart);
