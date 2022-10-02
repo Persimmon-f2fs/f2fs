@@ -182,8 +182,17 @@ static inline u32 MM_PHYS_ADDR(struct f2fs_sb_info *sbi, struct f2fs_meta_block 
 }
 
 static inline block_t LAST_BLOCK_IN_SEC(struct f2fs_sb_info *sbi, u32 secno) {
+    block_t zone_cap = 0;
+
+    // TODO: this might not work for other devices
+    if (FDEV(0).zone_capacity_blocks) {
+        zone_cap = FDEV(0).zone_capacity_blocks[secno];
+    } else {
+        zone_cap = BLKS_PER_SEC(sbi);
+    }
+
     return START_BLOCK_FROM_SEG0(sbi,
-        GET_SEG_FROM_SEC(sbi, secno)) + (f2fs_usable_segs_in_sec(sbi, secno) * sbi->blocks_per_seg);
+        GET_SEG_FROM_SEC(sbi, secno)) + (zone_cap);
 }
 
 static inline void DUMP_BITMAP(struct f2fs_sb_info *sbi) 
