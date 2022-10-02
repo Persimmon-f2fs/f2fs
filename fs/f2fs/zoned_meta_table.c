@@ -639,8 +639,7 @@ mm_migrate_page(struct f2fs_sb_info *sbi, block_t phys_blk, u32 lba)
     struct f2fs_mm_info *mmi = sbi->mm_info;
     struct page *data_page = NULL, *virt_page = NULL;
 
-    if (mmi->current_wp >= START_BLOCK_FROM_SEG0(sbi,
-                GET_SEG_FROM_SEC(sbi, mmi->current_secno + 1))) {
+    if (mmi->current_wp + 2 >= LAST_BLOCK_IN_SEC(sbi, mmi->current_secno)) {
         // zone would be full! move to the next
         err = choose_next_secno(sbi, false);
         if (err)
@@ -752,10 +751,10 @@ mm_write_gc_end(struct f2fs_sb_info *sbi, unsigned int secno)
     struct f2fs_mm_info *mmi = sbi->mm_info;
     struct f2fs_meta_block *mb = NULL;
     int err = 0;
-    if (mmi->current_wp >= START_BLOCK_FROM_SEG0(
-                sbi, GET_SEG_FROM_SEC(sbi, mmi->current_secno + 1))) {
+
+    if (mmi->current_wp + 2 >= LAST_BLOCK_IN_SEC(sbi, mmi->current_secno)) {
         // zone would be full! move to the next
-        err = choose_next_secno(sbi, true);
+        err = choose_next_secno(sbi, false);
         if (err)
             goto out;
     }
@@ -802,8 +801,8 @@ mm_garbage_collect_segment(struct f2fs_sb_info *sbi, block_t secno, u32 invalid_
     struct f2fs_super_block *fsb = F2FS_RAW_SUPER(sbi);
     struct page *meta_page = NULL, *chunk_page = NULL;
     struct f2fs_meta_block *mb_old = NULL, *mb_fresh = NULL;
-    u32 blklen = 0, cur_blk = 0, nr_migrated = 0;     
-    block_t blkstart = 0, chunk_blk;
+    u32 blklen, cur_blk = 0, nr_migrated = 0;     
+    block_t blkstart = 0, chunk_blk, blk_end;
     int err = 0;
 
     f2fs_info(sbi, "starting garbage collect segment!");
@@ -814,7 +813,9 @@ mm_garbage_collect_segment(struct f2fs_sb_info *sbi, block_t secno, u32 invalid_
     blklen = f2fs_usable_segs_in_sec(sbi, secno) <<
         le32_to_cpu(fsb->log_blocks_per_seg);
 
-    for (cur_blk = blkstart; cur_blk + 1 < blkstart + blklen; cur_blk += 2) {
+    blk_end = LAST_BLOCK_IN_SEC(sbi, secno);
+
+    for (cur_blk = blkstart; cur_blk + 1 < blk_end; cur_blk += 2) {
         meta_page = f2fs_get_meta_page(sbi, cur_blk + 1);
         if (IS_ERR(meta_page)) {
             f2fs_err(sbi, "Could not fetch meta page, %ld", PTR_ERR(meta_page));
