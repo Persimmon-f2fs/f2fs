@@ -501,7 +501,16 @@ read_phys_pages(struct f2fs_sb_info *sbi, struct page *virt_page)
 {
     int err = 0;
     block_t lba, chunk_lba, phys_lba;
-    struct page *meta_page, *phys_page;
+    struct page *meta_page;
+	struct f2fs_io_info fio = {
+		.sbi = sbi,
+		.type = META_MAPPED,
+		.op = REQ_OP_READ,
+		.op_flags = REQ_META | REQ_PRIO,
+		.encrypted_page = NULL,
+		.is_por = false,
+        .page = virt_page,
+	};
 
     lba = virt_page->index;
 
@@ -524,18 +533,21 @@ read_phys_pages(struct f2fs_sb_info *sbi, struct page *virt_page)
             return 0;
         }
 
-        phys_page = f2fs_get_meta_page(sbi, phys_lba);
-        if (IS_ERR(phys_page)) {
-            f2fs_err(sbi, "Could not grab phys page");
-            f2fs_put_page(meta_page, true);
-            return PTR_ERR(phys_page);
+        // prepare the fio
+        fio.old_blkaddr = phys_lba;
+        fio.new_blkaddr = phys_lba;
+
+        err = f2fs_submit_page_bio(&fio);
+        if (err) {
+            f2fs_err(sbi, "could not read page!");
+            goto out;
         }
 
-        // copy phys_page -> virt_page
-        memcpy(page_address(virt_page), page_address(phys_page), PAGE_SIZE);
+        f2fs_update_iostat(sbi, FS_META_READ_IO, F2FS_BLKSIZE);
 
+        lock_page(virt_page);
 
-        f2fs_put_page(phys_page, true);
+out:
         f2fs_put_page(meta_page, true);
 
         return err;

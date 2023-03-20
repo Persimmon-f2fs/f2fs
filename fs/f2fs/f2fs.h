@@ -3393,7 +3393,7 @@ static inline int get_inline_xattr_addrs(struct inode *inode)
 
 #define __is_large_section(sbi)		((sbi)->segs_per_sec > 1)
 
-#define __is_meta_io(fio) (PAGE_TYPE_OF_BIO((fio)->type) == META)
+#define __is_meta_io(fio) (PAGE_TYPE_OF_BIO((fio)->type) == META || PAGE_TYPE_OF_BIO((fio)->type) == META_MAPPED)
 
 bool f2fs_is_valid_blkaddr(struct f2fs_sb_info *sbi,
 					block_t blkaddr, int type);
