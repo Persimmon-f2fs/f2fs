@@ -237,7 +237,6 @@ create_f2fs_mm_info(struct f2fs_sb_info *sbi, block_t cp_addr)
         err = -ENOMEM;
         goto error;
     }
-
     bit_addrs = kmalloc(F2FS_BIT_SIZE(sbi), GFP_KERNEL);
     if (!bit_addrs) {
         err = -ENOMEM;
@@ -258,7 +257,7 @@ create_f2fs_mm_info(struct f2fs_sb_info *sbi, block_t cp_addr)
 
     err = read_mm_info_state(sbi, cp_addr);
     if (err) {
-        goto error;
+       goto error;
     }
 
     err = recover_mm_info_state(sbi);
@@ -344,6 +343,36 @@ fetch_chunk_page(struct f2fs_sb_info *sbi, block_t lba)
 }
 
 
+static struct f2fs_meta_block *
+read_old_meta_block(struct f2fs_sb_info *sbi, block_t lba)
+{
+    struct f2fs_meta_block *mb = NULL;
+    struct page *bat_page = NULL;
+    block_t bat_addr = 0;
+    int err = 0;
+
+    mb = kmalloc(sizeof(struct f2fs_meta_block), GFP_KERNEL);
+    memset(mb, 0, sizeof(struct f2fs_meta_block));
+
+    bat_addr = GET_BAT_ENTRY(sbi, lba);
+    if (bat_addr != BLOCK_UNALLOCATED) {
+        bat_page = f2fs_get_meta_page(sbi, bat_addr);
+        if (IS_ERR(bat_page)) {
+            err = PTR_ERR(bat_page);
+            f2fs_err(sbi, "Could not fetch bat_page err: %d", err);
+            goto out;
+        }
+        memcpy(mb, page_address(bat_page), sizeof(struct f2fs_meta_block));
+        f2fs_put_page(bat_page, true);
+    }
+
+    return mb;
+
+out:
+    kfree(mb);
+    return ERR_PTR(err);
+}
+
 // assumed to be called under write lock
 static int
 write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
@@ -351,8 +380,8 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 {
     struct f2fs_mm_info *mmi = sbi->mm_info;
     struct f2fs_meta_block *mb = NULL, *bat_mb = NULL;
-    struct page *data_page = NULL, *meta_page = NULL, *bat_page = NULL;
-    block_t lba = 0, old_phys_lba = 0, bat_addr = 0;
+    struct page *data_page = NULL, *meta_page = NULL;
+    block_t lba = 0, old_phys_lba = 0;
     u32 old_secno = 0, old_invalid_count = 0;
     int err = 0;
 
@@ -366,33 +395,14 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
     // grab the latest bat entry for the respective lba
     lba = virt_page->index;
 
-    bat_addr = GET_BAT_ENTRY(sbi, lba);
-    if (bat_addr != BLOCK_UNALLOCATED) {
-        bat_page = f2fs_get_meta_page(sbi, bat_addr);
-        if (IS_ERR(bat_page)) {
-            err = PTR_ERR(data_page);
-            f2fs_err(sbi, "Could not fetch bat_page err: %d", err);
-            goto out;
-        }
-        bat_mb = page_address(bat_page);
+    bat_mb = read_old_meta_block(sbi, lba);
 
-        // grab the latest bit entry for the respective secno
-        old_phys_lba = MM_PHYS_ADDR(sbi, bat_mb, lba);
+    // grab the latest bit entry for the respective secno
+    old_phys_lba = MM_PHYS_ADDR(sbi, bat_mb, lba);
 
-        if (old_phys_lba == BLOCK_UNALLOCATED) {
-            old_invalid_count = 0;
-        } else {
-            old_invalid_count = GET_BIT_ENTRY(sbi, GET_SEC_FROM_BLK(sbi, old_phys_lba));
-        }
-    } else {
-        // unallocated, just use empty data
-        bat_mb = kmalloc(sizeof(struct f2fs_meta_block), GFP_KERNEL);
-        memset(bat_mb, 0, sizeof(struct f2fs_meta_block));
-
-        old_phys_lba = BLOCK_UNALLOCATED;
-        old_secno = 0;
-        old_invalid_count = 0;
-    }
+    old_invalid_count = (old_phys_lba == BLOCK_UNALLOCATED)
+        ? 0
+        : GET_BIT_ENTRY(sbi, GET_SEC_FROM_BLK(sbi, old_phys_lba));
 
     // we're ready to actually write stuff to disk!
     data_page = f2fs_grab_meta_page(sbi, mmi->current_wp);
@@ -455,14 +465,7 @@ write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 put_data_page:
     f2fs_put_page(data_page, true);
 put_bat_page:
-    if (bat_addr != BLOCK_UNALLOCATED) {
-        // bat was previously allocated
-        f2fs_put_page(bat_page, true);
-    } else { 
-        // bat was not allocated
-        // metadata was allocated on heap
-        kfree(bat_mb);
-    }
+    kfree(bat_mb);
 
 out: 
     return err;
