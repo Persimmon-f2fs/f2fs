@@ -322,6 +322,14 @@ static void f2fs_write_end_io(struct bio *bio)
 			continue;
 		}
 
+		if (page_private_meta(page)) {
+			clear_page_private_meta(page);
+			unlock_page(page);
+			mempool_free(page, sbi->write_meta_dummy);
+
+			continue;
+		}
+
 		fscrypt_finalize_bounce_page(&page);
 
 #ifdef CONFIG_F2FS_FS_COMPRESSION

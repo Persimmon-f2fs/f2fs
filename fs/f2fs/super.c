@@ -4226,9 +4226,17 @@ try_onemore:
 		f2fs_err(sbi, "Failed to get valid F2FS checkpoint");
 		goto free_mm_inode;
 	}
+
+	sbi->write_meta_dummy =
+		mempool_create_page_pool(200, 0);
+	if (!sbi->write_meta_dummy) {
+		err = -ENOMEM;
+		goto free_mm_inode;
+	}
+
     err = create_f2fs_mm_info(sbi, cur_cp_addr);
     if (err) {
-        goto free_mm_inode;
+        goto free_meta_dummy;
     }
 
 	if (__is_set_ckpt_flags(F2FS_CKPT(sbi), CP_QUOTA_NEED_FSCK_FLAG))
@@ -4519,6 +4527,8 @@ free_sm:
 stop_ckpt_thread:
 	f2fs_stop_ckpt_thread(sbi);
    destroy_f2fs_mm_info(sbi);
+free_meta_dummy:
+	mempool_destroy(sbi->write_meta_dummy);
 free_mm_inode:
 	destroy_device_list(sbi);
 	kvfree(sbi->ckpt);
