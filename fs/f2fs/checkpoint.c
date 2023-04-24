@@ -461,7 +461,11 @@ long f2fs_sync_meta_mapped_pages(struct f2fs_sb_info *sbi, enum page_type type,
 		.for_reclaim = 0,
 	};
 
+	struct blk_plug plug;
+
     pagevec_init(&pvec);
+
+	blk_start_plug(&plug);
 
     while ((nr_pages = pagevec_lookup_tag(&pvec, mapping, &index,
                     PAGECACHE_TAG_DIRTY))) {
@@ -488,7 +492,7 @@ continue_unlock:
 				goto continue_unlock;
 			}
 
-			f2fs_wait_on_page_writeback(page, META, true, true);
+			f2fs_wait_on_page_writeback(page, META_MAPPED, true, true);
 
 			if (!clear_page_dirty_for_io(page))
 				goto continue_unlock;
@@ -507,6 +511,11 @@ continue_unlock:
         cond_resched();
     }
 stop:
+	if (nwritten)
+		f2fs_submit_merged_write(sbi, type);
+
+	blk_finish_plug(&plug);
+
     // sync possible cp / physical data
     return nwritten;
 }
@@ -1354,6 +1363,8 @@ void f2fs_wait_on_all_pages(struct f2fs_sb_info *sbi, int type)
 {
 	DEFINE_WAIT(wait);
 
+	// f2fs_info(sbi, "wait on all pages");
+
 	for (;;) {
 		if (!get_pages(sbi, type))
 			break;
@@ -1361,11 +1372,14 @@ void f2fs_wait_on_all_pages(struct f2fs_sb_info *sbi, int type)
 		if (unlikely(f2fs_cp_error(sbi)))
 			break;
 
-		if (type == F2FS_DIRTY_META)
-			f2fs_sync_meta_pages(sbi, META, LONG_MAX,
-							FS_CP_META_IO);
-		else if (type == F2FS_WB_CP_DATA)
+		if (type == F2FS_DIRTY_META) {
+			f2fs_sync_meta_pages(sbi, META, LONG_MAX, FS_CP_META_IO);
+		} else if (type == F2FS_WB_CP_DATA) {
 			f2fs_submit_merged_write(sbi, DATA);
+		} else if (type == F2FS_MM_META_DIRTY) {
+			f2fs_sync_meta_mapped_pages(sbi, META_MAPPED, LONG_MAX, FS_CP_META_IO);
+		}
+
 
 		prepare_to_wait(&sbi->cp_wait, &wait, TASK_UNINTERRUPTIBLE);
 		io_schedule_timeout(DEFAULT_IO_TIMEOUT);
@@ -1522,9 +1536,10 @@ int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
   int devi;
 #endif
 
+	// f2fs_info(sbi, "do checkpoint");
+
 	/* Flush all the NAT/SIT pages */
-    f2fs_sync_meta_mapped_pages(sbi, META, LONG_MAX, FS_CP_META_IO);
-	f2fs_sync_meta_pages(sbi, META, LONG_MAX, FS_CP_META_IO);
+    f2fs_sync_meta_mapped_pages(sbi, META_MAPPED, LONG_MAX, FS_CP_META_IO);
 
 	/* start to update checkpoint, cp ver is already updated previously */
 	ckpt->elapsed_time = cpu_to_le64(get_mtime(sbi, true));
@@ -1705,6 +1720,8 @@ int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 		set_sbi_flag(sbi, SBI_IS_DIRTY);
 
 	f2fs_bug_on(sbi, get_pages(sbi, F2FS_DIRTY_DENTS));
+
+	// f2fs_info(sbi, "did checkpoint");
 
 	return unlikely(f2fs_cp_error(sbi)) ? -EIO : 0;
 }

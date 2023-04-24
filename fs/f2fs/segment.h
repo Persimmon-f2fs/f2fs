@@ -873,6 +873,8 @@ static inline int nr_pages_to_skip(struct f2fs_sb_info *sbi, int type)
 		return 8 * sbi->blocks_per_seg;
 	else if (type == META)
 		return 8 * BIO_MAX_VECS;
+	else if (type == META_MAPPED)
+		return 4 * BIO_MAX_VECS;
 	else
 		return 0;
 }

@@ -4166,7 +4166,7 @@ static struct page *get_next_sit_page(struct f2fs_sb_info *sbi,
 	src_off = current_sit_addr(sbi, start);
 	dst_off = next_sit_addr(sbi, src_off);
 
-  page = grab_mapped_page(sbi, dst_off, true);
+	page = grab_mapped_page(sbi, dst_off, true);
 	seg_info_to_sit_page(sbi, page, start);
 
 	set_page_dirty(page);
@@ -4593,8 +4593,11 @@ static int build_sit_entries(struct f2fs_sb_info *sbi)
 			if (IS_ERR(page))
 				return PTR_ERR(page);
 			sit_blk = (struct f2fs_sit_block *)page_address(page);
+			
 			sit = sit_blk->entries[SIT_ENTRY_OFFSET(sit_i, start)];
 			f2fs_put_page(page, 1);
+
+
 
 			err = check_block_count(sbi, start, &sit);
 			if (err)

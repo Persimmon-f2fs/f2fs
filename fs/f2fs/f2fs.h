@@ -4564,6 +4564,19 @@ static inline void f2fs_io_schedule_timeout(long timeout)
 	io_schedule_timeout(timeout);
 }
 
+static inline bool check_all_zero(struct page *page)
+{
+	char *data;
+	int i;
+	data = (char *)page_address(page);
+	for (i = 0; i < PAGE_SIZE; ++i) {
+		if (data[i] != '\0') {
+			return false;
+		}
+	}
+	return true;
+}
+
 #define EFSBADCRC	EBADMSG		/* Bad CRC detected */
 #define EFSCORRUPTED	EUCLEAN		/* Filesystem is corrupted */
 

@@ -312,6 +312,8 @@ static void f2fs_write_end_io(struct bio *bio)
 		struct page *page = bvec->bv_page;
 		enum count_type type = WB_DATA_TYPE(page);
 
+		// f2fs_info(sbi, "wrote: %llu", bio->bi_iter.bi_sector >> 3);
+
 		if (page_private_dummy(page)) {
 			clear_page_private_dummy(page);
 			unlock_page(page);
@@ -325,7 +327,8 @@ static void f2fs_write_end_io(struct bio *bio)
 		if (page_private_meta(page)) {
 			clear_page_private_meta(page);
 			unlock_page(page);
-			mempool_free(page, sbi->write_meta_dummy);
+			// mempool_free(page, sbi->write_meta_dummy);
+			__free_pages(page, 0);
 
 			continue;
 		}
@@ -540,6 +543,7 @@ void f2fs_submit_bio(struct f2fs_sb_info *sbi,
 static void __submit_merged_bio(struct f2fs_bio_info *io)
 {
 	struct f2fs_io_info *fio = &io->fio;
+	struct f2fs_bio_info *test_io = io->sbi->write_io[META_MAPPED] + HOT;
 
 	if (!io->bio)
 		return;
@@ -548,6 +552,10 @@ static void __submit_merged_bio(struct f2fs_bio_info *io)
 		trace_f2fs_prepare_read_bio(io->sbi->sb, fio->type, io->bio);
 	else
 		trace_f2fs_prepare_write_bio(io->sbi->sb, fio->type, io->bio);
+
+	if (!is_read_io(fio->op) && test_io == io) {
+		f2fs_info(io->sbi, "meta mapped submitted. (%llu, %llu)", io->bio->bi_iter.bi_sector >> 3, io->last_block_in_bio);
+	}
 
 	__submit_bio(io->sbi, io->bio, fio->type);
 	io->bio = NULL;
@@ -625,8 +633,9 @@ static void __submit_merged_write_cond(struct f2fs_sb_info *sbi,
 			ret = __has_merged_page(io->bio, inode, page, ino);
 			f2fs_up_read(&io->io_rwsem);
 		}
-		if (ret)
+		if (ret) {
 			__f2fs_submit_merged_write(sbi, type, temp);
+		}
 
 		/* TODO: use HOT temp only for meta pages now. */
 		if (type >= META)
@@ -651,6 +660,7 @@ void f2fs_flush_merged_writes(struct f2fs_sb_info *sbi)
 	f2fs_submit_merged_write(sbi, DATA);
 	f2fs_submit_merged_write(sbi, NODE);
 	f2fs_submit_merged_write(sbi, META);
+	f2fs_submit_merged_write(sbi, META_MAPPED);
 }
 
 /*

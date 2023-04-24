@@ -1531,6 +1531,9 @@ static void f2fs_put_super(struct super_block *sb)
 	struct f2fs_sb_info *sbi = F2FS_SB(sb);
 	int i;
 	bool dropped;
+	struct f2fs_bio_info *io = sbi->write_io[META_MAPPED] + HOT;
+
+	// f2fs_info(sbi, "putting super");
 
 	/* unregister procfs/sysfs entries in advance to avoid race case */
 	f2fs_unregister_sysfs(sbi);
@@ -1544,6 +1547,7 @@ static void f2fs_put_super(struct super_block *sb)
 	 * flush all issued checkpoints and stop checkpoint issue thread.
 	 * after then, all checkpoints should be done by each process context.
 	 */
+	// f2fs_info(sbi, "stopping ckpt thread");
 	f2fs_stop_ckpt_thread(sbi);
 
 	/*
@@ -1591,11 +1595,23 @@ static void f2fs_put_super(struct super_block *sb)
 	iput(sbi->node_inode);
 	sbi->node_inode = NULL;
 
+	// f2fs_info(sbi, "putting mm_inode");
+
     iput(sbi->mm_inode);
     sbi->mm_inode = NULL;
 
+	// f2fs_info(sbi, "put mm_inode");
+
 	iput(sbi->meta_inode);
 	sbi->meta_inode = NULL;
+
+	// f2fs_info(sbi, "put super");
+
+	f2fs_down_read(&io->io_rwsem);
+	if (io->bio) {
+		f2fs_info(sbi, "meta bio is not null in put_super");
+	}
+	f2fs_up_read(&io->io_rwsem);
 
 	/*
 	 * iput() can update stat information, if f2fs_write_checkpoint()
@@ -4228,7 +4244,7 @@ try_onemore:
 	}
 
 	sbi->write_meta_dummy =
-		mempool_create_page_pool(200, 0);
+		mempool_create_page_pool(2, 0);
 	if (!sbi->write_meta_dummy) {
 		err = -ENOMEM;
 		goto free_mm_inode;

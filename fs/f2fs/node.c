@@ -600,7 +600,7 @@ retry:
 	index = current_nat_addr(sbi, nid);
 	f2fs_up_read(&nm_i->nat_tree_lock);
 
-  page = get_mapped_page(sbi, index, true);
+	page = get_mapped_page(sbi, index, true);
 	if (IS_ERR(page))
 		return PTR_ERR(page);
 
