@@ -571,9 +571,9 @@ static int stat_show(struct seq_file *s, void *v)
 			   si->bimodal, si->avg_vblocks);
 
 		/* bat info */
-		seq_puts(s, "\nBAT state\n");
-		for (j = 0; j < F2FS_BAT_SIZE(si->sbi); j++)
-			seq_printf(s, "(%d) -> (%u)\n", j, si->sbi->mm_info->bat_addrs[j]);
+		// seq_puts(s, "\nBAT state\n");
+		// for (j = 0; j < F2FS_BAT_SIZE(si->sbi); j++)
+		// 	seq_printf(s, "(%d) -> (%u)\n", j, si->sbi->mm_info->bat_addrs[j]);
 
 		/* memory footprint */
 		update_mem_info(si->sbi);
