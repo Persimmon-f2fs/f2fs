@@ -546,7 +546,7 @@ void f2fs_submit_bio(struct f2fs_sb_info *sbi,
 static void __submit_merged_bio(struct f2fs_bio_info *io)
 {
 	struct f2fs_io_info *fio = &io->fio;
-	struct f2fs_bio_info *test_io = io->sbi->write_io[META_MAPPED] + HOT;
+	// struct f2fs_bio_info *test_io = io->sbi->write_io[META_MAPPED] + HOT;
 
 	if (!io->bio)
 		return;
@@ -556,9 +556,9 @@ static void __submit_merged_bio(struct f2fs_bio_info *io)
 	else
 		trace_f2fs_prepare_write_bio(io->sbi->sb, fio->type, io->bio);
 
-	if (!is_read_io(fio->op) && test_io == io) {
-		f2fs_info(io->sbi, "meta mapped submitted. (%llu, %llu)", io->bio->bi_iter.bi_sector >> 3, io->last_block_in_bio);
-	}
+	// if (!is_read_io(fio->op) && test_io == io) {
+	// 	f2fs_info(io->sbi, "meta mapped submitted. (%llu, %llu)", io->bio->bi_iter.bi_sector >> 3, io->last_block_in_bio);
+	// }
 
 	__submit_bio(io->sbi, io->bio, fio->type);
 	io->bio = NULL;
