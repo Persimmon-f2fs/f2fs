@@ -1537,9 +1537,12 @@ int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 #endif
 
 	// f2fs_info(sbi, "do checkpoint");
+	// f2fs_info(sbi, "pre sync dirty meta mapped pages: %lld", get_pages(sbi, F2FS_MM_META_DIRTY));
 
 	/* Flush all the NAT/SIT pages */
     f2fs_sync_meta_mapped_pages(sbi, META_MAPPED, LONG_MAX, FS_CP_META_IO);
+
+	// f2fs_info(sbi, "post sync dirty meta mapped pages: %lld", get_pages(sbi, F2FS_MM_META_DIRTY));
 
 	/* start to update checkpoint, cp ver is already updated previously */
 	ckpt->elapsed_time = cpu_to_le64(get_mtime(sbi, true));
@@ -1648,9 +1651,9 @@ int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 		start_blk += orphan_blocks;
 	}
 
-  // Persist mm data
-  mm_write_info(sbi, start_blk);
-  start_blk += F2FS_TOTAL_META_MAPPED_BLKS(sbi);
+	// Persist mm data
+	mm_write_info(sbi, start_blk);
+	start_blk += F2FS_TOTAL_META_MAPPED_BLKS(sbi);
 
 	f2fs_write_data_summaries(sbi, start_blk);
 	start_blk += data_sum_blocks;
@@ -1671,13 +1674,20 @@ int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	percpu_counter_set(&sbi->alloc_valid_block_count, 0);
 	percpu_counter_set(&sbi->rf_node_block_count, 0);
 
+
+	// f2fs_info(sbi, "sync meta pages");
+
 	/* Here, we have one bio having CP pack except cp pack 2 page */
 	f2fs_sync_meta_pages(sbi, META, LONG_MAX, FS_CP_META_IO);
 	/* Wait for all dirty meta pages to be submitted for IO */
 	f2fs_wait_on_all_pages(sbi, F2FS_DIRTY_META);
 
+	// f2fs_info(sbi, "waited for all.");
+
 	/* wait for previous submitted meta pages writeback */
 	f2fs_wait_on_all_pages(sbi, F2FS_WB_CP_DATA);
+
+	// f2fs_info(sbi, "waited for F2FS WB CP DATA.");
 
 	/* flush all device cache */
 	err = f2fs_flush_device_cache(sbi);
@@ -1686,7 +1696,16 @@ int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 
 	/* barrier and flush checkpoint cp pack 2 page if it can */
 	commit_checkpoint(sbi, ckpt, start_blk);
+
 	f2fs_wait_on_all_pages(sbi, F2FS_WB_CP_DATA);
+
+	f2fs_wait_on_all_pages(sbi, F2FS_MM_META_DIRTY);
+
+	// f2fs_info(sbi, "waited for all after commit checkpoint.");
+
+
+	/* are there dirty meta mapped pages after writing the checkpoint? */
+	// f2fs_info(sbi, "dirty meta mapped pages: %lld", get_pages(sbi, F2FS_MM_META_DIRTY));
 
 	/*
 	 * invalidate intermediate page cache borrowed from meta inode which are

@@ -19,6 +19,7 @@
 #include "node.h"
 #include "segment.h"
 #include "gc.h"
+#include "zoned_meta_table.h"
 
 static LIST_HEAD(f2fs_stat_list);
 static DEFINE_RAW_SPINLOCK(f2fs_stat_lock);
@@ -568,6 +569,11 @@ static int stat_show(struct seq_file *s, void *v)
 		f2fs_update_sit_info(si->sbi);
 		seq_printf(s, "\nBDF: %u, avg. vblocks: %u\n",
 			   si->bimodal, si->avg_vblocks);
+
+		/* bat info */
+		seq_puts(s, "\nBAT state\n");
+		for (j = 0; j < F2FS_BAT_SIZE(si->sbi); j++)
+			seq_printf(s, "(%d) -> (%u)\n", j, si->sbi->mm_info->bat_addrs[j]);
 
 		/* memory footprint */
 		update_mem_info(si->sbi);

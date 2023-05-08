@@ -1122,7 +1122,7 @@ enum count_type {
 enum page_type {
 	DATA,
 	NODE,
-  META_MAPPED,
+	META_MAPPED,
 	META,
 	NR_PAGE_TYPE,
 	META_FLUSH,
@@ -2420,6 +2420,7 @@ static inline void inc_page_count(struct f2fs_sb_info *sbi, int count_type)
 	if (count_type == F2FS_DIRTY_DENTS ||
 			count_type == F2FS_DIRTY_NODES ||
 			count_type == F2FS_DIRTY_META ||
+			count_type == F2FS_MM_META_DIRTY ||
 			count_type == F2FS_DIRTY_QDATA ||
 			count_type == F2FS_DIRTY_IMETA)
 		set_sbi_flag(sbi, SBI_IS_DIRTY);

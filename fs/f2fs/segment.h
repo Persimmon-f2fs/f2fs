@@ -741,8 +741,8 @@ static inline int check_block_count(struct f2fs_sb_info *sbi,
 	} while (cur_pos < usable_blks_per_seg);
 
 	if (unlikely(GET_SIT_VBLOCKS(raw_sit) != valid_blocks)) {
-		f2fs_err(sbi, "Mismatch valid blocks %d vs. %d",
-			 GET_SIT_VBLOCKS(raw_sit), valid_blocks);
+		f2fs_err(sbi, "Mismatch valid blocks %d vs. %d in segno: %d",
+			 GET_SIT_VBLOCKS(raw_sit), valid_blocks, segno);
 		set_sbi_flag(sbi, SBI_NEED_FSCK);
 		return -EFSCORRUPTED;
 	}

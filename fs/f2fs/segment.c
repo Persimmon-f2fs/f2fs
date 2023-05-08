@@ -3949,8 +3949,10 @@ static int read_normal_summaries(struct f2fs_sb_info *sbi, int type)
 		if (__exist_node_summaries(sbi))
 			blk_addr = sum_blk_addr(sbi, NR_CURSEG_NODE_TYPE,
 							type - CURSEG_HOT_NODE);
-		else
+		else {
+			// TODO: fix me. this is reading from outside the checkpoint.
 			blk_addr = GET_SUM_BLOCK(sbi, segno);
+		}
 	}
 
 	new = f2fs_get_meta_page(sbi, blk_addr);
@@ -4088,8 +4090,7 @@ static void write_compacted_summaries(struct f2fs_sb_info *sbi, block_t blkaddr)
 
 			set_page_dirty(page);
 			f2fs_put_page(page, 1);
-      // gauge the necessity of this
-      //  f2fs_wait_on_page_writeback(page, META, true, true);
+			f2fs_wait_on_page_writeback(page, META, true, true);
 			page = NULL;
 		}
 	}
@@ -4097,7 +4098,7 @@ static void write_compacted_summaries(struct f2fs_sb_info *sbi, block_t blkaddr)
 		set_page_dirty(page);
 		f2fs_put_page(page, 1);
     // gauge the necessity of this
-    // f2fs_wait_on_page_writeback(page, META, true, true);
+		f2fs_wait_on_page_writeback(page, META, true, true);
 	}
 }
 

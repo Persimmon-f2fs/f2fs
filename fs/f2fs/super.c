@@ -1600,7 +1600,7 @@ static void f2fs_put_super(struct super_block *sb)
     iput(sbi->mm_inode);
     sbi->mm_inode = NULL;
 
-	// f2fs_info(sbi, "put mm_inode");
+	// f2fs_info(sbi, "putting meta_inode");
 
 	iput(sbi->meta_inode);
 	sbi->meta_inode = NULL;
@@ -4498,6 +4498,8 @@ reset_checkpoint:
   goto sync_free_meta;
 
 #endif
+	// test_mm_functionality(sbi);
+
 	return 0;
 
 sync_free_meta:

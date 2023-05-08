@@ -64,6 +64,7 @@ static bool __is_cp_guaranteed(struct page *page)
 
 	if (inode->i_ino == F2FS_META_INO(sbi) ||
 			inode->i_ino == F2FS_NODE_INO(sbi) ||
+			inode->i_ino == F2FS_META_MAPPED_INO(sbi) ||
 			S_ISDIR(inode->i_mode))
 		return true;
 
@@ -312,7 +313,6 @@ static void f2fs_write_end_io(struct bio *bio)
 		struct page *page = bvec->bv_page;
 		enum count_type type = WB_DATA_TYPE(page);
 
-		// f2fs_info(sbi, "wrote: %llu", bio->bi_iter.bi_sector >> 3);
 
 		if (page_private_dummy(page)) {
 			clear_page_private_dummy(page);
@@ -324,14 +324,17 @@ static void f2fs_write_end_io(struct bio *bio)
 			continue;
 		}
 
-		if (page_private_meta(page)) {
-			clear_page_private_meta(page);
-			unlock_page(page);
-			// mempool_free(page, sbi->write_meta_dummy);
-			__free_pages(page, 0);
+		// if (page_private_meta(page)) {
+		// 	clear_page_private_meta(page);
+		// 	end_page_writeback(page);
 
-			continue;
-		}
+		// 	// f2fs_put_page(page, 0);
+		// 	// unlock_page(page);
+		// 	// mempool_free(page, sbi->write_meta_dummy);
+		// 	// __free_pages(page, 0);
+
+		// 	continue;
+		// }
 
 		fscrypt_finalize_bounce_page(&page);
 

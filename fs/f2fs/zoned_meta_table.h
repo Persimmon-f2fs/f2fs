@@ -48,6 +48,16 @@ struct f2fs_mm_info {
 };
 
 
+static inline void DUMP_BAT(struct f2fs_sb_info *sbi)
+{
+    struct f2fs_mm_info *mmi = sbi->mm_info;
+    int j = 0;
+
+    for (j = 0; j < F2FS_BAT_SIZE(sbi); j++)
+        f2fs_info(sbi, "(%d) -> (%u)", j, mmi->bat_addrs[j]);
+}
+
+
 static inline u32 FIRST_META_SECNO(struct f2fs_sb_info *sbi)
 {
     struct f2fs_super_block *fsb = F2FS_RAW_SUPER(sbi);
@@ -232,5 +242,8 @@ int
 mm_write_meta_page(struct page *page, struct writeback_control *wbc);
 
 extern const struct address_space_operations f2fs_mm_aops;
+
+void
+test_mm_functionality(struct f2fs_sb_info *sbi);
 
 #endif // __ZONED_META_TABLE_H__
