@@ -317,6 +317,11 @@ get_cache:
 
 		si->page_mem += (unsigned long long)npages << PAGE_SHIFT;
 	}
+	if (sbi->mm_inode) {
+		unsigned npages = META_MAPPED_MAPPING(sbi)->nrpages;
+
+		si->page_mem += (unsigned long long)npages << PAGE_SHIFT;
+	}
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	if (sbi->compress_inode) {
 		unsigned npages = COMPRESS_MAPPING(sbi)->nrpages;

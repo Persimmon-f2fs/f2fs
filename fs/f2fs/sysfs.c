@@ -141,6 +141,7 @@ static ssize_t total_meta_mapped_blocks_show(struct f2fs_attr *a,
 static ssize_t memory_show(struct f2fs_attr *a, struct f2fs_sb_info *sbi,
 			   char *buf)
 {
+	u32 meta_mem = 0;
 	u32 page_mem = 0;
 	u32 base_mem = 0;
 	if (sbi->node_inode) {
@@ -152,6 +153,11 @@ static ssize_t memory_show(struct f2fs_attr *a, struct f2fs_sb_info *sbi,
 		unsigned npages = META_MAPPING(sbi)->nrpages;
 
 		page_mem += (unsigned long long)npages << PAGE_SHIFT;
+	}
+	if (sbi->mm_inode) {
+		unsigned npages = META_MAPPED_MAPPING(sbi)->nrpages;
+		meta_mem += (unsigned long long)npages << PAGE_SHIFT;
+		page_mem += meta_mem;
 	}
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	if (sbi->compress_inode) {
@@ -209,9 +215,10 @@ static ssize_t memory_show(struct f2fs_attr *a, struct f2fs_sb_info *sbi,
 	base_mem += NM_I(sbi)->nat_blocks / 8;
 	base_mem += NM_I(sbi)->nat_blocks * sizeof(unsigned short);
 
-	return sprintf(buf, "Memory: %u KB\nBase: %u KB\nPaged: %u KB\n",
+	return sprintf(buf,
+		       "Memory: %u KB\nBase: %u KB\nPaged: %u KB\nMeta: %u\n",
 		       (base_mem >> 10) + (page_mem >> 10), base_mem >> 10,
-		       page_mem >> 10);
+		       page_mem >> 10, meta_mem >> 10);
 }
 static ssize_t sb_status_show(struct f2fs_attr *a, struct f2fs_sb_info *sbi,
 			      char *buf)
