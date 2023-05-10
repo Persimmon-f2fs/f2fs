@@ -516,7 +516,7 @@ stop:
 
 	blk_finish_plug(&plug);
 
-	truncate_inode_pages(mapping, le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr) + 1);
+	// truncate_inode_pages(mapping, le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr) + 1);
 
     // sync possible cp / physical data
     return nwritten;

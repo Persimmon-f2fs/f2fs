@@ -342,11 +342,11 @@ static int choose_next_secno(struct f2fs_sb_info *sbi, bool in_gc_loop)
 	return err;
 }
 
-static struct page *grab_direct_page(struct f2fs_sb_info *sbi, block_t lba)
+static struct page *grab_bat_page(struct f2fs_sb_info *sbi, block_t lba)
 {
 	struct address_space *mapping = META_MAPPED_MAPPING(sbi);
 	struct page *page;
-	block_t index = lba +
+	block_t index = GET_BAT_IDX(sbi, lba) +
 			le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr) +
 			1; // avoid conflicting with other mapped pages
 repeat:
@@ -362,24 +362,25 @@ repeat:
 }
 
 // TODO: deduplicate with __get_meta_page in checkpoint.
-static struct page *get_direct_page(struct f2fs_sb_info *sbi, block_t lba)
+static struct page *get_bat_page(struct f2fs_sb_info *sbi, block_t lba)
 {
 	struct address_space *mapping = META_MAPPED_MAPPING(sbi);
 	struct page *page;
-	block_t index = lba +
-			le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr) +
-			1; // avoid conflicting with other mapped pages
+	block_t index, meta_lba;
 	struct f2fs_io_info fio = {
 		.sbi = sbi,
 		.type = META_MAPPED,
 		.op = REQ_OP_READ,
 		.op_flags = REQ_META | REQ_PRIO,
-		.old_blkaddr = lba,
-		.new_blkaddr = lba,
 		.encrypted_page = NULL,
 		.is_por = false,
 	};
 	int err;
+
+	index = GET_BAT_IDX(sbi, lba) +
+			le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr) +
+			1; // avoid conflicting with other mapped pages
+	meta_lba =  GET_BAT_ENTRY(sbi, lba);
 
 repeat:
 	page = f2fs_grab_cache_page(mapping, index, false);
@@ -390,7 +391,15 @@ repeat:
 	if (PageUptodate(page))
 		goto out;
 
+	if (meta_lba == BLOCK_UNALLOCATED) {
+		memset(page_address(page), 0, PAGE_SIZE);
+		SetPageUptodate(page);
+		goto out;
+	}
+
 	fio.page = page;
+	fio.new_blkaddr = meta_lba;
+	fio.old_blkaddr = meta_lba;
 
 	err = f2fs_submit_page_bio(&fio);
 	if (err) {
@@ -420,27 +429,20 @@ static struct f2fs_meta_block *read_old_meta_block(struct f2fs_sb_info *sbi,
 {
 	struct f2fs_meta_block *mb = NULL;
 	struct page *bat_page = NULL;
-	block_t bat_addr = 0;
 	int err = 0;
 
 	mb = kmalloc(sizeof(struct f2fs_meta_block), GFP_KERNEL);
 	memset(mb, 0, sizeof(struct f2fs_meta_block));
 
-	bat_addr = GET_BAT_ENTRY(sbi, lba);
-
-	// f2fs_info(sbi, "reading old meta block for addr: %u", bat_addr);
-
-	if (bat_addr != BLOCK_UNALLOCATED) {
-		bat_page = get_direct_page(sbi, bat_addr);
-		if (IS_ERR(bat_page)) {
-			err = PTR_ERR(bat_page);
-			f2fs_err(sbi, "Could not fetch bat_page err: %d", err);
-			goto out;
-		}
-		memcpy(mb, page_address(bat_page),
-		       sizeof(struct f2fs_meta_block));
-		f2fs_put_page(bat_page, true);
+	bat_page = get_bat_page(sbi, lba);
+	if (IS_ERR(bat_page)) {
+		err = PTR_ERR(bat_page);
+		f2fs_err(sbi, "Could not fetch bat_page err: %d", err);
+		goto out;
 	}
+	memcpy(mb, page_address(bat_page),
+			sizeof(struct f2fs_meta_block));
+	f2fs_put_page(bat_page, true);
 
 	return mb;
 
@@ -519,7 +521,7 @@ static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 	issue_page_write(sbi, virt_page, data_lba, io_type);
 
 	// make a dummy page for the metadata
-	meta_page = grab_direct_page(sbi, meta_lba);
+	meta_page =grab_bat_page(sbi, lba);
 
 	// set_page_private_meta(meta_page);
 
@@ -590,7 +592,7 @@ struct page *grab_mapped_page(struct f2fs_sb_info *sbi, u32 lba, bool for_write)
 static int read_phys_pages(struct f2fs_sb_info *sbi, struct page *virt_page)
 {
 	int err = 0;
-	block_t lba, chunk_lba, phys_lba;
+	block_t lba, phys_lba;
 	struct page *meta_page;
 	struct f2fs_io_info fio = {
 		.sbi = sbi,
@@ -605,49 +607,40 @@ static int read_phys_pages(struct f2fs_sb_info *sbi, struct page *virt_page)
 
 	lba = virt_page->index;
 
-	// f2fs_info(sbi, "reading for lba: %u", lba);
-
-	chunk_lba = GET_BAT_ENTRY(sbi, lba);
-	if (chunk_lba == BLOCK_UNALLOCATED) {
-		// block is unallocated, so fill with 0s
-		memset(page_address(virt_page), 0, PAGE_SIZE);
-		return 0;
-	} else {
-		// f2fs_info(sbi, "Looking up meta_page at chunk_lba: %u", chunk_lba);
-		meta_page = get_direct_page(sbi, chunk_lba);
-		if (IS_ERR(meta_page)) {
-			f2fs_err(sbi, "Could not grab meta page");
-			return PTR_ERR(meta_page);
-		}
-
-		phys_lba = MM_PHYS_ADDR(sbi, page_address(meta_page), lba);
-		if (phys_lba == BLOCK_UNALLOCATED) {
-			memset(page_address(virt_page), 0, PAGE_SIZE);
-			f2fs_put_page(meta_page, true);
-			return 0;
-		}
-
-		// prepare the fio
-		fio.old_blkaddr = phys_lba;
-		fio.new_blkaddr = phys_lba;
-
-		// f2fs_info(sbi, "reading phys_lba: %u", phys_lba);
-
-		err = f2fs_submit_page_bio(&fio);
-		if (err) {
-			f2fs_err(sbi, "could not read page!");
-			goto out;
-		}
-
-		f2fs_update_iostat(sbi, FS_META_READ_IO, F2FS_BLKSIZE);
-
-		lock_page(virt_page);
-
-	out:
-		f2fs_put_page(meta_page, true);
-
-		return err;
+	// f2fs_info(sbi, "Looking up meta_page at chunk_lba: %u", chunk_lba);
+	meta_page = get_bat_page(sbi, lba);
+	if (IS_ERR(meta_page)) {
+		f2fs_err(sbi, "Could not grab meta page");
+		return PTR_ERR(meta_page);
 	}
+
+	phys_lba = MM_PHYS_ADDR(sbi, page_address(meta_page), lba);
+	if (phys_lba == BLOCK_UNALLOCATED) {
+		memset(page_address(virt_page), 0, PAGE_SIZE);
+		f2fs_put_page(meta_page, true);
+		return 0;
+	}
+
+	// prepare the fio
+	fio.old_blkaddr = phys_lba;
+	fio.new_blkaddr = phys_lba;
+
+	// f2fs_info(sbi, "reading phys_lba: %u", phys_lba);
+
+	err = f2fs_submit_page_bio(&fio);
+	if (err) {
+		f2fs_err(sbi, "could not read page!");
+		goto out;
+	}
+
+	f2fs_update_iostat(sbi, FS_META_READ_IO, F2FS_BLKSIZE);
+
+	lock_page(virt_page);
+
+out:
+	f2fs_put_page(meta_page, true);
+
+	return err;
 }
 
 // assumed to be called under write or read lock
