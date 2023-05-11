@@ -324,17 +324,13 @@ static void f2fs_write_end_io(struct bio *bio)
 			continue;
 		}
 
-		// if (page_private_meta(page)) {
-		// 	clear_page_private_meta(page);
-		// 	end_page_writeback(page);
+		if (page_private_meta(page)) {
+			clear_page_private_meta(page);
+			unlock_page(page);
+			__free_pages(page, 0);
 
-		// 	// f2fs_put_page(page, 0);
-		// 	// unlock_page(page);
-		// 	// mempool_free(page, sbi->write_meta_dummy);
-		// 	// __free_pages(page, 0);
-
-		// 	continue;
-		// }
+			continue;
+		}
 
 		fscrypt_finalize_bounce_page(&page);
 

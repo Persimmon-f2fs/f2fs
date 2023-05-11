@@ -467,6 +467,8 @@ long f2fs_sync_meta_mapped_pages(struct f2fs_sb_info *sbi, enum page_type type,
 
 	blk_start_plug(&plug);
 
+	// f2fs_info(sbi, "syncing some meta mapped pages");
+
     while ((nr_pages = pagevec_lookup_tag(&pvec, mapping, &index,
                     PAGECACHE_TAG_DIRTY))) {
         int i;
@@ -513,6 +515,8 @@ continue_unlock:
 stop:
 	if (nwritten)
 		f2fs_submit_merged_write(sbi, type);
+
+	// f2fs_info(sbi, "synced some meta mapped pages");
 
 	blk_finish_plug(&plug);
 
