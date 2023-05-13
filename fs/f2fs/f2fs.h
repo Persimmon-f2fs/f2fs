@@ -1632,7 +1632,6 @@ struct f2fs_sb_info {
 	/* keep migration IO order for LFS mode */
 	struct f2fs_rwsem io_order_lock;
 	mempool_t *write_io_dummy;		/* Dummy pages */
-	mempool_t *write_meta_dummy; 	/* Dummy meta pages */
 	pgoff_t metapage_eio_ofs;		/* EIO page offset */
 	int metapage_eio_cnt;			/* EIO count */
 

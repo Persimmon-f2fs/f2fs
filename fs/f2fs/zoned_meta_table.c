@@ -519,8 +519,6 @@ static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 			GET_BIT_ENTRY(sbi, GET_SEC_FROM_BLK(sbi, old_phys_lba));
 
 
-	issue_page_write(sbi, virt_page, data_lba, io_type);
-
 	// make a dummy page for the metadata
 	// f2fs_info(sbi, "grabbing new meta page");
 	meta_page = grab_bat_page(sbi, lba);
@@ -550,6 +548,11 @@ static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 	SET_BAT_ENTRY(sbi, lba, meta_lba);
 
 	copied_page = alloc_pages(GFP_NOIO | __GFP_NOFAIL, 0);
+	if (!copied_page) {
+		f2fs_err(sbi, "Could not allocate additional page");
+		err = -EIO;
+		goto put_bat_mb;
+	}
 
 	lock_page(copied_page);
 
@@ -560,12 +563,15 @@ static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 	// write the meta page
 
 	// f2fs_info(sbi, "writing the pages");
+	issue_page_write(sbi, virt_page, data_lba, io_type);
 	issue_page_write(sbi, copied_page, meta_lba, io_type);
+
 
 	clear_page_dirty_for_io(virt_page);
 
 	mmi->current_wp += 2;
 
+put_bat_mb:
 	kfree(bat_mb);
 
 	// f2fs_info(sbi, "wrote some pages");
