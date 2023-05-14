@@ -554,6 +554,9 @@ static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 		goto put_bat_mb;
 	}
 
+	// avoid uninitialized value
+	copied_page->mapping = NULL;
+
 	lock_page(copied_page);
 
 	memcpy(page_address(copied_page), page_address(meta_page), PAGE_SIZE);
