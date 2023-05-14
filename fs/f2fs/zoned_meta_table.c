@@ -559,6 +559,9 @@ static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 
 	lock_page(copied_page);
 
+	zero_user_segment(copied_page, 0, PAGE_SIZE);
+	set_page_private_meta(copied_page);
+
 	memcpy(page_address(copied_page), page_address(meta_page), PAGE_SIZE);
 
 	unlock_page(meta_page);
