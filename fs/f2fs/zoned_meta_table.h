@@ -4,6 +4,7 @@
 #include <linux/rwsem.h>
 #include "f2fs.h"
 #include "segment.h"
+#include "iostat.h"
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define CEILING(x, y) (((x) + (y)-1) / (y))
@@ -252,6 +253,11 @@ void test_mm_functionality(struct f2fs_sb_info *sbi);
 
 struct page *get_chunk_page(struct f2fs_sb_info *sbi, block_t lba);
 
-struct page *grab_bat_page(struct f2fs_sb_info *sbi, block_t lba);
+struct page *grab_chunk_page(struct f2fs_sb_info *sbi, block_t lba);
+
+void issue_page_write(struct f2fs_sb_info *sbi, struct page *page,
+			     block_t lba, enum iostat_type io_type);
+
+int choose_next_secno(struct f2fs_sb_info *sbi, bool in_gc_loop);
 
 #endif // __ZONED_META_TABLE_H__

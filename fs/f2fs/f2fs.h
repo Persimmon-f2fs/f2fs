@@ -1104,6 +1104,7 @@ enum count_type {
 	F2FS_DIO_WRITE,
 	F2FS_DIO_READ,
     F2FS_MM_META_DIRTY,
+	F2FS_CHUNK_META_DIRTY,
 	NR_COUNT_TYPE,
 };
 
@@ -1123,6 +1124,7 @@ enum page_type {
 	DATA,
 	NODE,
 	META_MAPPED,
+	META_CHUNK,
 	META,
 	NR_PAGE_TYPE,
 	META_FLUSH,
@@ -4598,5 +4600,7 @@ void dump_node_count(struct f2fs_sb_info *sbi);
 int zoned_cp_next_start(struct f2fs_sb_info *sbi,
         block_t *next_start, u32 write_size_blocks);
 long f2fs_sync_meta_mapped_pages(struct f2fs_sb_info *sbi, enum page_type type, long nr_to_write, enum iostat_type io_type);
+long f2fs_sync_meta_chunk_pages(struct f2fs_sb_info *sbi, enum page_type type, long nr_to_write, enum iostat_type io_type);
+
 
 #endif /* _LINUX_F2FS_H */

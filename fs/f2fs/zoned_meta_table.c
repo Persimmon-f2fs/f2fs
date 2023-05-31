@@ -299,7 +299,7 @@ void destroy_f2fs_mm_info(struct f2fs_sb_info *sbi)
 }
 
 // assumed to be called under write lock
-static int choose_next_secno(struct f2fs_sb_info *sbi, bool in_gc_loop)
+int choose_next_secno(struct f2fs_sb_info *sbi, bool in_gc_loop)
 {
 	struct f2fs_super_block *fsb = F2FS_RAW_SUPER(sbi);
 	struct f2fs_mm_info *mmi = sbi->mm_info;
@@ -342,71 +342,14 @@ static int choose_next_secno(struct f2fs_sb_info *sbi, bool in_gc_loop)
 	return err;
 }
 
-static struct f2fs_meta_block *read_old_meta_block(struct f2fs_sb_info *sbi,
-						   block_t lba)
-{
-	struct f2fs_meta_block *mb = NULL;
-	struct page *bat_page = NULL;
-	int err = 0;
-
-	mb = kmalloc(sizeof(struct f2fs_meta_block), GFP_KERNEL);
-	memset(mb, 0, sizeof(struct f2fs_meta_block));
-
-	bat_page = get_chunk_page(sbi, lba);
-	if (IS_ERR(bat_page)) {
-		err = PTR_ERR(bat_page);
-		f2fs_err(sbi, "Could not fetch bat_page err: %d", err);
-		goto out;
-	}
-	memcpy(mb, page_address(bat_page),
-			sizeof(struct f2fs_meta_block));
-	f2fs_put_page(bat_page, true);
-
-	return mb;
-
-out:
-	kfree(mb);
-	return ERR_PTR(err);
-}
-
-static void issue_page_write(struct f2fs_sb_info *sbi, struct page *page,
-			     block_t lba, enum iostat_type io_type)
-{
-	struct f2fs_io_info fio = {
-		.sbi = sbi,
-		.type = META_MAPPED,
-		.temp = HOT,
-		.op = REQ_OP_WRITE,
-		.op_flags = REQ_SYNC | REQ_META | REQ_PRIO,
-		.old_blkaddr = lba,
-		.new_blkaddr = lba,
-		.page = page,
-		.encrypted_page = NULL,
-		.compressed_page = NULL,
-		.in_list = false,
-	};
-
-	if (unlikely(lba >= MAIN_BLKADDR(sbi)))
-		fio.op_flags &= ~REQ_META;
-
-	set_page_writeback(page);
-	ClearPageError(page);
-	f2fs_submit_page_write(&fio);
-	// f2fs_submit_page_bio(&fio);
-
-	stat_inc_meta_count(sbi, lba);
-	f2fs_update_iostat(sbi, io_type, F2FS_BLKSIZE);
-}
-
 // assumed to be called under write lock
 static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 			     enum iostat_type io_type)
 {
 	struct f2fs_mm_info *mmi = sbi->mm_info;
 	struct f2fs_meta_block *mb = NULL;
-	struct page *meta_page = NULL, *copied_page = NULL;
-	block_t lba = 0, old_phys_lba = 0, data_lba = 0, meta_lba = 0;
-	u32 old_secno = 0, old_invalid_count = 0;
+	struct page *meta_page = NULL;
+	block_t lba = 0, data_lba = 0, meta_lba = 0;
 	int err = 0;
 
 	// f2fs_info(sbi, "current_wp: %u", mmi->current_wp);
@@ -439,7 +382,6 @@ static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 
 	SET_SECTION_BITMAP(sbi, GET_SEC_FROM_BLK(sbi, meta_lba),
 			   SECTION_NON_EMPTY);
-	SET_BAT_ENTRY(sbi, lba, meta_lba);
 
 	// f2fs_info(sbi, "writing the pages");
 	issue_page_write(sbi, virt_page, data_lba, io_type);
@@ -983,4 +925,33 @@ void test_mm_functionality(struct f2fs_sb_info *sbi)
 
 		f2fs_put_page(read_page, 1);
 	}
+}
+
+void issue_page_write(struct f2fs_sb_info *sbi, struct page *page,
+			     block_t lba, enum iostat_type io_type)
+{
+	struct f2fs_io_info fio = {
+		.sbi = sbi,
+		.type = META_MAPPED,
+		.temp = HOT,
+		.op = REQ_OP_WRITE,
+		.op_flags = REQ_SYNC | REQ_META | REQ_PRIO,
+		.old_blkaddr = lba,
+		.new_blkaddr = lba,
+		.page = page,
+		.encrypted_page = NULL,
+		.compressed_page = NULL,
+		.in_list = false,
+	};
+
+	if (unlikely(lba >= MAIN_BLKADDR(sbi)))
+		fio.op_flags &= ~REQ_META;
+
+	set_page_writeback(page);
+	ClearPageError(page);
+	f2fs_submit_page_write(&fio);
+	// f2fs_submit_page_bio(&fio);
+
+	stat_inc_meta_count(sbi, lba);
+	f2fs_update_iostat(sbi, io_type, F2FS_BLKSIZE);
 }

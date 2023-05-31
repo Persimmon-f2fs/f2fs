@@ -526,6 +526,12 @@ stop:
     return nwritten;
 }
 
+long f2fs_sync_meta_chunk_pages(struct f2fs_sb_info *sbi, enum page_type type, long nr_to_write, enum iostat_type io_type)
+{
+	// TODO: implement this
+	return 0;
+}
+
 static bool f2fs_dirty_meta_folio(struct address_space *mapping,
 		struct folio *folio)
 {
