@@ -250,4 +250,8 @@ extern const struct address_space_operations f2fs_mm_aops;
 
 void test_mm_functionality(struct f2fs_sb_info *sbi);
 
+struct page *get_chunk_page(struct f2fs_sb_info *sbi, block_t lba);
+
+struct page *grab_bat_page(struct f2fs_sb_info *sbi, block_t lba);
+
 #endif // __ZONED_META_TABLE_H__
