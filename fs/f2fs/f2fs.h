@@ -1618,9 +1618,10 @@ struct f2fs_sb_info {
 	unsigned int log_blocks_per_blkz;	/* log2 F2FS blocks per zone */
 #endif
 
-  /* for metadata lba mapping */
-  struct f2fs_mm_info *mm_info;
-  struct inode *mm_inode;
+	/* for metadata lba mapping */
+	struct f2fs_mm_info *mm_info;
+	struct inode *mm_inode;
+	struct inode *meta_chunk_inode;
 
 	/* for node-related operations */
 	struct f2fs_nm_info *nm_info;		/* node manager */
@@ -1685,6 +1686,7 @@ struct f2fs_sb_info {
 	unsigned int node_ino_num;		/* node inode number*/
 	unsigned int meta_ino_num;		/* meta inode number*/
     unsigned int meta_mapped_ino_num; /* meta mapped inode number */
+    unsigned int meta_chunk_ino_num; /* meta mapped inode number */
 	unsigned int log_blocks_per_seg;	/* log2 blocks per segment */
 	unsigned int blocks_per_seg;		/* blocks per segment */
 	unsigned int segs_per_sec;		/* segments per section */
@@ -2059,7 +2061,12 @@ static inline struct address_space *META_MAPPING(struct f2fs_sb_info *sbi)
 
 static inline struct address_space *META_MAPPED_MAPPING(struct f2fs_sb_info *sbi)
 {
-  return sbi->mm_inode->i_mapping;
+	return sbi->mm_inode->i_mapping;
+}
+
+static inline struct address_space *META_CHUNK_MAPPING(struct f2fs_sb_info *sbi)
+{
+	return sbi->meta_chunk_inode->i_mapping;
 }
 
 static inline struct address_space *NODE_MAPPING(struct f2fs_sb_info *sbi)

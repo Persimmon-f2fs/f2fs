@@ -249,6 +249,8 @@ int mm_write_meta_page(struct page *page, struct writeback_control *wbc);
 
 extern const struct address_space_operations f2fs_mm_aops;
 
+extern const struct address_space_operations f2fs_chunk_aops;
+
 void test_mm_functionality(struct f2fs_sb_info *sbi);
 
 struct page *get_chunk_page(struct f2fs_sb_info *sbi, block_t lba);

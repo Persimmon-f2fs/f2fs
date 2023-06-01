@@ -8,7 +8,7 @@
 
 struct page *get_chunk_page(struct f2fs_sb_info *sbi, block_t lba)
 {
-	struct address_space *mapping = META_MAPPED_MAPPING(sbi);
+	struct address_space *mapping = META_CHUNK_MAPPING(sbi);
 	struct page *page;
 	block_t index, meta_lba;
 	struct f2fs_io_info fio = {
@@ -21,9 +21,7 @@ struct page *get_chunk_page(struct f2fs_sb_info *sbi, block_t lba)
 	};
 	int err;
 
-	index = GET_BAT_IDX(sbi, lba) +
-			le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr) +
-			1; // avoid conflicting with other mapped pages
+	index = GET_BAT_IDX(sbi, lba);
 	meta_lba =  GET_BAT_ENTRY(sbi, lba);
 
 repeat:
@@ -70,11 +68,10 @@ out:
 
 struct page *grab_chunk_page(struct f2fs_sb_info *sbi, block_t lba)
 {
-	struct address_space *mapping = META_MAPPED_MAPPING(sbi);
+	struct address_space *mapping = META_CHUNK_MAPPING(sbi);
 	struct page *page;
-	block_t index = GET_BAT_IDX(sbi, lba) +
-			le32_to_cpu(F2FS_RAW_SUPER(sbi)->last_ssa_blkaddr) +
-			1; // avoid conflicting with other mapped pages
+	block_t index = GET_BAT_IDX(sbi, lba);
+
 repeat:
 	page = f2fs_grab_cache_page(mapping, index, false);
 	if (!page) {

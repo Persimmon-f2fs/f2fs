@@ -498,7 +498,8 @@ struct inode *f2fs_iget(struct super_block *sb, unsigned long ino)
 	}
 	if (ino == F2FS_NODE_INO(sbi) ||
       ino == F2FS_META_INO(sbi) ||
-      ino == F2FS_META_MAPPED_INO(sbi))
+      ino == F2FS_META_MAPPED_INO(sbi) ||
+      ino == F2FS_META_CHUNK_INO(sbi))
 		goto make_now;
 
 #ifdef CONFIG_F2FS_FS_COMPRESSION
@@ -516,9 +517,12 @@ make_now:
 	} else if (ino == F2FS_META_INO(sbi)) {
 		inode->i_mapping->a_ops = &f2fs_meta_aops;
 		mapping_set_gfp_mask(inode->i_mapping, GFP_NOFS);
-  } else if (ino == F2FS_META_MAPPED_INO(sbi)) {
-    inode->i_mapping->a_ops = &f2fs_mm_aops;
-    mapping_set_gfp_mask(inode->i_mapping, GFP_NOFS);
+	} else if (ino == F2FS_META_MAPPED_INO(sbi)) {
+		inode->i_mapping->a_ops = &f2fs_mm_aops;
+		mapping_set_gfp_mask(inode->i_mapping, GFP_NOFS);
+	} else if (ino == F2FS_META_CHUNK_INO(sbi)) {
+		inode->i_mapping->a_ops = &f2fs_chunk_aops;
+		mapping_set_gfp_mask(inode->i_mapping, GFP_NOFS);
 	} else if (ino == F2FS_COMPRESS_INO(sbi)) {
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 		inode->i_mapping->a_ops = &f2fs_compress_aops;
