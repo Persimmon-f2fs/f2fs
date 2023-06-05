@@ -18,7 +18,7 @@ f2fs_mod-$(CONFIG_F2FS_IOSTAT) += iostat.o
 #
 ifdef PROJECT_ROOT
 ifdef KERNEL_DIR
-	
+
 PWD:=${PROJECT_ROOT}/fs/f2fs
 
 default:

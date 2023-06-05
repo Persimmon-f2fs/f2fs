@@ -22,7 +22,7 @@ struct page *get_chunk_page(struct f2fs_sb_info *sbi, block_t lba)
 	int err;
 
 	index = GET_BAT_IDX(sbi, lba);
-	meta_lba =  GET_BAT_ENTRY(sbi, lba);
+	meta_lba = GET_BAT_ENTRY(sbi, lba);
 
 repeat:
 	page = f2fs_grab_cache_page(mapping, index, false);
@@ -84,7 +84,8 @@ repeat:
 }
 
 // must be called from the mmi write lock
-static int __write_chunk_page(struct f2fs_sb_info *sbi, struct page *page, enum iostat_type io_type)
+static int __write_chunk_page(struct f2fs_sb_info *sbi, struct page *page,
+			      enum iostat_type io_type)
 {
 	struct f2fs_mm_info *mmi = sbi->mm_info;
 	block_t meta_lba = 0;
@@ -111,7 +112,7 @@ out:
 	return err;
 }
 
-static int write_chunk_page(struct page *page, struct writeback_control *wbc)
+int write_chunk_page(struct page *page, struct writeback_control *wbc)
 {
 	struct f2fs_sb_info *sbi = F2FS_P_SB(page);
 	int err = 0;
@@ -145,7 +146,7 @@ redirty_out:
 }
 
 static int write_chunk_pages(struct address_space *mapping,
-			       struct writeback_control *wbc)
+			     struct writeback_control *wbc)
 {
 	struct f2fs_sb_info *sbi = F2FS_M_SB(mapping);
 	long written;
@@ -162,8 +163,8 @@ static int write_chunk_pages(struct address_space *mapping,
 	if (!f2fs_down_write_trylock(&sbi->cp_global_sem))
 		goto skip_write;
 
-	written = f2fs_sync_meta_chunk_pages(sbi, META_CHUNK,
-					      wbc->nr_to_write, FS_META_IO);
+	written = f2fs_sync_meta_chunk_pages(sbi, META_CHUNK, wbc->nr_to_write,
+					     FS_META_IO);
 	f2fs_up_write(&sbi->cp_global_sem);
 	wbc->nr_to_write = max((long)0, wbc->nr_to_write - written);
 
@@ -175,7 +176,7 @@ skip_write:
 }
 
 static bool dirty_chunk_folio(struct address_space *mapping,
-				  struct folio *folio)
+			      struct folio *folio)
 {
 	if (!folio_test_uptodate(folio))
 		folio_mark_uptodate(folio);

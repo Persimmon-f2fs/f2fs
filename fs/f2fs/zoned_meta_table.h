@@ -257,8 +257,9 @@ struct page *get_chunk_page(struct f2fs_sb_info *sbi, block_t lba);
 
 struct page *grab_chunk_page(struct f2fs_sb_info *sbi, block_t lba);
 
-void issue_page_write(struct f2fs_sb_info *sbi, struct page *page,
-			     block_t lba, enum iostat_type io_type);
+int write_chunk_page(struct page *page, struct writeback_control *wbc);
+void issue_page_write(struct f2fs_sb_info *sbi, struct page *page, block_t lba,
+		      enum iostat_type io_type);
 
 int choose_next_secno(struct f2fs_sb_info *sbi, bool in_gc_loop);
 
