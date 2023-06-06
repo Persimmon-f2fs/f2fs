@@ -349,7 +349,7 @@ static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 	struct f2fs_mm_info *mmi = sbi->mm_info;
 	struct f2fs_meta_block *mb = NULL;
 	struct page *meta_page = NULL;
-	block_t lba = 0, data_lba = 0, meta_lba = 0;
+	block_t lba = 0, data_lba = 0;
 	int err = 0;
 
 	// f2fs_info(sbi, "current_wp: %u", mmi->current_wp);
@@ -380,7 +380,7 @@ static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 	// dirty immediately after this operation (maybe encapsulate this in a function.)
 	mb->bat_chunk[SLOT_IN_BAT(sbi, lba)] = cpu_to_le32(data_lba);
 
-	SET_SECTION_BITMAP(sbi, GET_SEC_FROM_BLK(sbi, meta_lba),
+	SET_SECTION_BITMAP(sbi, GET_SEC_FROM_BLK(sbi, data_lba),
 			   SECTION_NON_EMPTY);
 
 	// f2fs_info(sbi, "writing the pages");
@@ -391,6 +391,8 @@ static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 	clear_page_dirty_for_io(virt_page);
 
 	mmi->current_wp++;
+
+	f2fs_put_page(meta_page, 1);
 
 	// f2fs_info(sbi, "wrote some pages");
 
