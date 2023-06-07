@@ -1467,6 +1467,8 @@ void f2fs_wait_on_all_pages(struct f2fs_sb_info *sbi, int type)
 		} else if (type == F2FS_MM_META_DIRTY) {
 			f2fs_sync_meta_mapped_pages(sbi, META_MAPPED, LONG_MAX,
 						    FS_CP_META_IO);
+		} else if (type == F2FS_CHUNK_META_DIRTY) {
+			f2fs_sync_meta_chunk_pages(sbi, META_CHUNK, LONG_MAX, FS_CP_META_IO);
 		}
 
 		prepare_to_wait(&sbi->cp_wait, &wait, TASK_UNINTERRUPTIBLE);
@@ -1630,6 +1632,7 @@ int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 
 	/* Flush all the NAT/SIT pages */
 	f2fs_sync_meta_mapped_pages(sbi, META_MAPPED, LONG_MAX, FS_CP_META_IO);
+	f2fs_sync_meta_chunk_pages(sbi, META_CHUNK, LONG_MAX, FS_CP_META_IO);
 
 	// f2fs_info(sbi, "post sync dirty meta mapped pages: %lld", get_pages(sbi, F2FS_MM_META_DIRTY));
 
@@ -1795,6 +1798,8 @@ int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	f2fs_wait_on_all_pages(sbi, F2FS_WB_CP_DATA);
 
 	f2fs_wait_on_all_pages(sbi, F2FS_MM_META_DIRTY);
+
+	f2fs_wait_on_all_pages(sbi, F2FS_CHUNK_META_DIRTY);
 
 	// f2fs_info(sbi, "waited for all after commit checkpoint.");
 
