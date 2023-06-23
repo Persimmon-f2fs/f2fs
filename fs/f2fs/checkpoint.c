@@ -1464,6 +1464,7 @@ void f2fs_wait_on_all_pages(struct f2fs_sb_info *sbi, int type)
 					     FS_CP_META_IO);
 		} else if (type == F2FS_WB_CP_DATA) {
 			f2fs_submit_merged_write(sbi, DATA);
+			// f2fs_info(sbi, "submitted wp cp data for pages: %lld", get_pages(sbi, type));
 		} else if (type == F2FS_MM_META_DIRTY) {
 			f2fs_sync_meta_mapped_pages(sbi, META_MAPPED, LONG_MAX,
 						    FS_CP_META_IO);
@@ -1475,6 +1476,8 @@ void f2fs_wait_on_all_pages(struct f2fs_sb_info *sbi, int type)
 		io_schedule_timeout(DEFAULT_IO_TIMEOUT);
 	}
 	finish_wait(&sbi->cp_wait, &wait);
+
+	// f2fs_info(sbi, "waited.");
 }
 
 static void update_ckpt_flags(struct f2fs_sb_info *sbi, struct cp_control *cpc)
@@ -1799,7 +1802,10 @@ int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 
 	f2fs_wait_on_all_pages(sbi, F2FS_MM_META_DIRTY);
 
+
+	// f2fs_info(sbi, "waiting on chunk meta");
 	f2fs_wait_on_all_pages(sbi, F2FS_CHUNK_META_DIRTY);
+	// f2fs_info(sbi, "waited on chunk meta");
 
 	// f2fs_info(sbi, "waited for all after commit checkpoint.");
 
@@ -2085,14 +2091,18 @@ int f2fs_issue_checkpoint(struct f2fs_sb_info *sbi)
 		int ret;
 
 		f2fs_down_write(&sbi->gc_lock);
+		f2fs_info(sbi, "writing checkpoint");
 		ret = f2fs_write_checkpoint(sbi, &cpc);
+		f2fs_info(sbi, "write checkpoint");
 		f2fs_up_write(&sbi->gc_lock);
 
 		return ret;
 	}
 
-	if (!cprc->f2fs_issue_ckpt)
+	if (!cprc->f2fs_issue_ckpt) {
+		f2fs_info(sbi, "writing checkpoint sync");
 		return __write_checkpoint_sync(sbi);
+	}
 
 	init_ckpt_req(&req);
 
@@ -2109,10 +2119,14 @@ int f2fs_issue_checkpoint(struct f2fs_sb_info *sbi)
 	if (waitqueue_active(&cprc->ckpt_wait_queue))
 		wake_up(&cprc->ckpt_wait_queue);
 
+	f2fs_info(sbi, "waiting for completion");
+
 	if (cprc->f2fs_issue_ckpt)
 		wait_for_completion(&req.wait);
 	else
 		flush_remained_ckpt_reqs(sbi, &req);
+
+	f2fs_info(sbi, "completed!");
 
 	return req.ret;
 }

@@ -1533,7 +1533,7 @@ static void f2fs_put_super(struct super_block *sb)
 	bool dropped;
 	struct f2fs_bio_info *io = sbi->write_io[META_MAPPED] + HOT;
 
-	// f2fs_info(sbi, "putting super");
+	f2fs_info(sbi, "putting super");
 
 	/* unregister procfs/sysfs entries in advance to avoid race case */
 	f2fs_unregister_sysfs(sbi);
@@ -1547,7 +1547,7 @@ static void f2fs_put_super(struct super_block *sb)
 	 * flush all issued checkpoints and stop checkpoint issue thread.
 	 * after then, all checkpoints should be done by each process context.
 	 */
-	// f2fs_info(sbi, "stopping ckpt thread");
+	f2fs_info(sbi, "stopping ckpt thread");
 	f2fs_stop_ckpt_thread(sbi);
 
 	/*
@@ -1598,8 +1598,12 @@ static void f2fs_put_super(struct super_block *sb)
     iput(sbi->mm_inode);
     sbi->mm_inode = NULL;
 
+	f2fs_info(sbi, "putting meta chunk inode");
+
 	iput(sbi->meta_chunk_inode);
 	sbi->meta_chunk_inode = NULL;
+
+	f2fs_info(sbi, "put meta chunk inode");
 
 	iput(sbi->meta_inode);
 	sbi->meta_inode = NULL;
@@ -1654,6 +1658,8 @@ int f2fs_sync_fs(struct super_block *sb, int sync)
 	struct f2fs_sb_info *sbi = F2FS_SB(sb);
 	int err = 0;
 
+	// f2fs_info(sbi, "f2fs_sync_fs");
+
 	if (unlikely(f2fs_cp_error(sbi)))
 		return 0;
 	if (unlikely(is_sbi_flag_set(sbi, SBI_CP_DISABLED)))
@@ -1664,8 +1670,14 @@ int f2fs_sync_fs(struct super_block *sb, int sync)
 	if (unlikely(is_sbi_flag_set(sbi, SBI_POR_DOING)))
 		return -EAGAIN;
 
+	// f2fs_info(sbi, "issuing checkpoint");
+
 	if (sync)
 		err = f2fs_issue_checkpoint(sbi);
+
+	// f2fs_info(sbi, "issued checkpoint");
+
+	// f2fs_info(sbi, "f2fs_sync_fs executed");
 
 	return err;
 }
@@ -2854,7 +2866,9 @@ void f2fs_quota_off_umount(struct super_block *sb)
 	 * This can cause NULL exception for node_inode in end_io, since
 	 * put_super already dropped it.
 	 */
+	// printk("sync filesystem!\n");
 	sync_filesystem(sb);
+	// printk("synced filesystem!\n");
 }
 
 static void f2fs_truncate_quota_inode_pages(struct super_block *sb)

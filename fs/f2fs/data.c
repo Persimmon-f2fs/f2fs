@@ -65,6 +65,7 @@ static bool __is_cp_guaranteed(struct page *page)
 	if (inode->i_ino == F2FS_META_INO(sbi) ||
 			inode->i_ino == F2FS_NODE_INO(sbi) ||
 			inode->i_ino == F2FS_META_MAPPED_INO(sbi) ||
+			inode->i_ino == F2FS_META_CHUNK_INO(sbi) ||
 			S_ISDIR(inode->i_mode))
 		return true;
 
@@ -3528,7 +3529,9 @@ void f2fs_invalidate_folio(struct folio *folio, size_t offset, size_t length)
 			dec_page_count(sbi, F2FS_DIRTY_NODES);
         } else if (inode->i_ino == F2FS_META_MAPPED_INO(sbi)) {
             dec_page_count(sbi, F2FS_MM_META_DIRTY);
-        } else {
+        }  else if (inode->i_ino == F2FS_META_CHUNK_INO(sbi)) {
+            dec_page_count(sbi, F2FS_CHUNK_META_DIRTY);
+		} else {
             inode_dec_dirty_pages(inode);
             f2fs_remove_dirty_inode(inode);
         }

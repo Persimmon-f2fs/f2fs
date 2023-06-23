@@ -384,7 +384,7 @@ static int write_mapped_page(struct f2fs_sb_info *sbi, struct page *virt_page,
 			   SECTION_NON_EMPTY);
 
 	// f2fs_info(sbi, "writing the pages");
-	issue_page_write(sbi, virt_page, data_lba, io_type);
+	issue_page_write(sbi, virt_page, data_lba, META_MAPPED, io_type);
 
 	set_page_dirty(meta_page);
 
@@ -930,11 +930,11 @@ void test_mm_functionality(struct f2fs_sb_info *sbi)
 }
 
 void issue_page_write(struct f2fs_sb_info *sbi, struct page *page,
-			     block_t lba, enum iostat_type io_type)
+			     block_t lba, enum page_type p_type, enum iostat_type io_type)
 {
 	struct f2fs_io_info fio = {
 		.sbi = sbi,
-		.type = META_MAPPED,
+		.type = p_type,
 		.temp = HOT,
 		.op = REQ_OP_WRITE,
 		.op_flags = REQ_SYNC | REQ_META | REQ_PRIO,

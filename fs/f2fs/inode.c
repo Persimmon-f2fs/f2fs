@@ -723,7 +723,8 @@ int f2fs_write_inode(struct inode *inode, struct writeback_control *wbc)
 
 	if (inode->i_ino == F2FS_NODE_INO(sbi) ||
 			inode->i_ino == F2FS_META_INO(sbi) ||
-			inode->i_ino == F2FS_META_MAPPED_INO(sbi))
+			inode->i_ino == F2FS_META_MAPPED_INO(sbi) ||
+			inode->i_ino == F2FS_META_CHUNK_INO(sbi))
 		return 0;
 
 	/*
@@ -768,7 +769,8 @@ void f2fs_evict_inode(struct inode *inode)
 
 	if (inode->i_ino == F2FS_NODE_INO(sbi) ||
 			inode->i_ino == F2FS_META_INO(sbi) ||
-      inode->i_ino == F2FS_META_MAPPED_INO(sbi) ||
+			inode->i_ino == F2FS_META_MAPPED_INO(sbi) ||
+			inode->i_ino == F2FS_META_CHUNK_INO(sbi) ||
 			inode->i_ino == F2FS_COMPRESS_INO(sbi))
 		goto out_clear;
 

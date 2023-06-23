@@ -102,7 +102,9 @@ static int __write_chunk_page(struct f2fs_sb_info *sbi, struct page *page,
 
 	mmi->bat_addrs[page->index] = meta_lba;
 
-	issue_page_write(sbi, page, meta_lba, io_type);
+	// f2fs_info(sbi, "meta_lba: %u", meta_lba);
+
+	issue_page_write(sbi, page, meta_lba, META_CHUNK, io_type);
 
 	clear_page_dirty_for_io(page);
 
