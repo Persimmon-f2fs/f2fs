@@ -159,6 +159,11 @@ static ssize_t memory_show(struct f2fs_attr *a, struct f2fs_sb_info *sbi,
 		meta_mem += (unsigned long long)npages << PAGE_SHIFT;
 		page_mem += meta_mem;
 	}
+	if (sbi->meta_chunk_inode) {
+		unsigned npages = META_CHUNK_MAPPING(sbi)->nrpages;
+		meta_mem += (unsigned long long)npages << PAGE_SHIFT;
+		page_mem += meta_mem;
+	}
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	if (sbi->compress_inode) {
 		unsigned npages = COMPRESS_MAPPING(sbi)->nrpages;

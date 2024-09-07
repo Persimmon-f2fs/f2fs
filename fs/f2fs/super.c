@@ -1533,7 +1533,7 @@ static void f2fs_put_super(struct super_block *sb)
 	bool dropped;
 	struct f2fs_bio_info *io = sbi->write_io[META_MAPPED] + HOT;
 
-	// f2fs_info(sbi, "putting super");
+	f2fs_info(sbi, "putting super");
 
 	/* unregister procfs/sysfs entries in advance to avoid race case */
 	f2fs_unregister_sysfs(sbi);
@@ -1547,7 +1547,7 @@ static void f2fs_put_super(struct super_block *sb)
 	 * flush all issued checkpoints and stop checkpoint issue thread.
 	 * after then, all checkpoints should be done by each process context.
 	 */
-	// f2fs_info(sbi, "stopping ckpt thread");
+	f2fs_info(sbi, "stopping ckpt thread");
 	f2fs_stop_ckpt_thread(sbi);
 
 	/*
@@ -1595,17 +1595,18 @@ static void f2fs_put_super(struct super_block *sb)
 	iput(sbi->node_inode);
 	sbi->node_inode = NULL;
 
-	// f2fs_info(sbi, "putting mm_inode");
-
     iput(sbi->mm_inode);
     sbi->mm_inode = NULL;
 
-	// f2fs_info(sbi, "putting meta_inode");
+	f2fs_info(sbi, "putting meta chunk inode");
+
+	iput(sbi->meta_chunk_inode);
+	sbi->meta_chunk_inode = NULL;
+
+	f2fs_info(sbi, "put meta chunk inode");
 
 	iput(sbi->meta_inode);
 	sbi->meta_inode = NULL;
-
-	// f2fs_info(sbi, "put super");
 
 	f2fs_down_read(&io->io_rwsem);
 	if (io->bio) {
@@ -1657,6 +1658,8 @@ int f2fs_sync_fs(struct super_block *sb, int sync)
 	struct f2fs_sb_info *sbi = F2FS_SB(sb);
 	int err = 0;
 
+	// f2fs_info(sbi, "f2fs_sync_fs");
+
 	if (unlikely(f2fs_cp_error(sbi)))
 		return 0;
 	if (unlikely(is_sbi_flag_set(sbi, SBI_CP_DISABLED)))
@@ -1667,8 +1670,14 @@ int f2fs_sync_fs(struct super_block *sb, int sync)
 	if (unlikely(is_sbi_flag_set(sbi, SBI_POR_DOING)))
 		return -EAGAIN;
 
+	// f2fs_info(sbi, "issuing checkpoint");
+
 	if (sync)
 		err = f2fs_issue_checkpoint(sbi);
+
+	// f2fs_info(sbi, "issued checkpoint");
+
+	// f2fs_info(sbi, "f2fs_sync_fs executed");
 
 	return err;
 }
@@ -2857,7 +2866,9 @@ void f2fs_quota_off_umount(struct super_block *sb)
 	 * This can cause NULL exception for node_inode in end_io, since
 	 * put_super already dropped it.
 	 */
+	// printk("sync filesystem!\n");
 	sync_filesystem(sb);
+	// printk("synced filesystem!\n");
 }
 
 static void f2fs_truncate_quota_inode_pages(struct super_block *sb)
@@ -3615,6 +3626,8 @@ void init_sb_info(struct f2fs_sb_info *sbi)
 	F2FS_ROOT_INO(sbi) = le32_to_cpu(raw_super->root_ino);
 	F2FS_NODE_INO(sbi) = le32_to_cpu(raw_super->node_ino);
 	F2FS_META_INO(sbi) = le32_to_cpu(raw_super->meta_ino);
+	F2FS_META_MAPPED_INO(sbi) = le32_to_cpu(raw_super->meta_mapped_ino);
+	F2FS_META_CHUNK_INO(sbi) = le32_to_cpu(raw_super->meta_chunk_ino);
 	sbi->cur_victim_sec = NULL_SECNO;
 	sbi->gc_mode = GC_NORMAL;
 	sbi->next_victim_seg[BG_GC] = NULL_SEGNO;
@@ -4216,36 +4229,43 @@ try_onemore:
 		goto free_page_array_cache;
 	}
 
-  sbi->mm_inode = f2fs_iget(sb, F2FS_META_MAPPED_INO(sbi));
-  if (IS_ERR(sbi->mm_inode)) {
-    f2fs_err(sbi, "Failed to read F2FS meta mapped inode");
-    err = PTR_ERR(sbi->mm_inode);
-    goto free_meta_inode;
-  }
+	sbi->mm_inode = f2fs_iget(sb, F2FS_META_MAPPED_INO(sbi));
+	if (IS_ERR(sbi->mm_inode)) {
+		f2fs_err(sbi, "Failed to read F2FS meta mapped inode");
+		err = PTR_ERR(sbi->mm_inode);
+		goto free_meta_inode;
+	}
+
+	sbi->meta_chunk_inode = f2fs_iget(sb, F2FS_META_CHUNK_INO(sbi));
+	if (IS_ERR(sbi->meta_chunk_inode)) {
+		f2fs_err(sbi, "Failed to read F2FS meta chunk inode");
+		err = PTR_ERR(sbi->meta_chunk_inode);
+		goto free_mm_inode;
+	}
 
 	/* Initialize device list */
 	err = f2fs_scan_devices(sbi);
 	if (err) {
 		f2fs_err(sbi, "Failed to find devices");
-		goto free_mm_inode;
+		goto free_chunk_inode;
 	}
 
 	err = f2fs_init_post_read_wq(sbi);
 	if (err) {
 		f2fs_err(sbi, "Failed to initialize post read workqueue");
-		goto free_mm_inode;
+		goto free_chunk_inode;
 	}
 
   // TODO: may want to allow conventional zones, eventually
     err = zoned_get_valid_checkpoint(sbi, &cur_cp_addr);
 	if (err) {
 		f2fs_err(sbi, "Failed to get valid F2FS checkpoint");
-		goto free_mm_inode;
+		goto free_chunk_inode;
 	}
 
     err = create_f2fs_mm_info(sbi, cur_cp_addr);
     if (err) {
-        goto free_mm_inode;
+        goto free_chunk_inode;
     }
 
 	if (__is_set_ckpt_flags(F2FS_CKPT(sbi), CP_QUOTA_NEED_FSCK_FLAG))
@@ -4537,12 +4557,15 @@ free_sm:
 	f2fs_destroy_post_read_wq(sbi);
 stop_ckpt_thread:
 	f2fs_stop_ckpt_thread(sbi);
-   destroy_f2fs_mm_info(sbi);
-free_mm_inode:
+	destroy_f2fs_mm_info(sbi);
+free_chunk_inode:
 	destroy_device_list(sbi);
 	kvfree(sbi->ckpt);
-  make_bad_inode(sbi->mm_inode);
-  iput(sbi->mm_inode);
+	make_bad_inode(sbi->meta_chunk_inode);
+	iput(sbi->meta_chunk_inode);
+free_mm_inode:
+	make_bad_inode(sbi->mm_inode);
+	iput(sbi->mm_inode);
 free_meta_inode:
 	make_bad_inode(sbi->meta_inode);
 	iput(sbi->meta_inode);
@@ -4781,7 +4804,7 @@ module_init(init_f2fs_fs)
 module_exit(exit_f2fs_fs)
 
 MODULE_AUTHOR("Sam");
-MODULE_VERSION("0.2d");
+MODULE_VERSION("0.2o");
 MODULE_DESCRIPTION("Flash Friendly File System");
 MODULE_LICENSE("GPL");
 MODULE_SOFTDEP("pre: crc32");

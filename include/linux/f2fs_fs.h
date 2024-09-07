@@ -36,6 +36,7 @@
 #define F2FS_NODE_INO(sbi)	((sbi)->node_ino_num)
 #define F2FS_META_INO(sbi)	((sbi)->meta_ino_num)
 #define F2FS_META_MAPPED_INO(sbi) ((sbi)->meta_mapped_ino_num)
+#define F2FS_META_CHUNK_INO(sbi) ((sbi)->meta_chunk_ino_num)
 #define F2FS_COMPRESS_INO(sbi)	(NM_I(sbi)->max_nid)
 
 #define F2FS_MAX_QUOTAS		3
@@ -106,6 +107,7 @@ struct f2fs_super_block {
 	__le32 node_ino;		/* node inode number */
 	__le32 meta_ino;		/* meta inode number */
     __le32 meta_mapped_ino; /* meta mapped inode number */
+    __le32 meta_chunk_ino;  /* meta mapped inode number */
 	__u8 uuid[16];			/* 128-bit uuid for volume */
 	__le16 volume_name[MAX_VOLUME_NAME];	/* volume name */
 	__le32 extension_count;		/* # of extensions below */

@@ -1104,6 +1104,7 @@ enum count_type {
 	F2FS_DIO_WRITE,
 	F2FS_DIO_READ,
     F2FS_MM_META_DIRTY,
+	F2FS_CHUNK_META_DIRTY,
 	NR_COUNT_TYPE,
 };
 
@@ -1123,6 +1124,7 @@ enum page_type {
 	DATA,
 	NODE,
 	META_MAPPED,
+	META_CHUNK,
 	META,
 	NR_PAGE_TYPE,
 	META_FLUSH,
@@ -1616,9 +1618,10 @@ struct f2fs_sb_info {
 	unsigned int log_blocks_per_blkz;	/* log2 F2FS blocks per zone */
 #endif
 
-  /* for metadata lba mapping */
-  struct f2fs_mm_info *mm_info;
-  struct inode *mm_inode;
+	/* for metadata lba mapping */
+	struct f2fs_mm_info *mm_info;
+	struct inode *mm_inode;
+	struct inode *meta_chunk_inode;
 
 	/* for node-related operations */
 	struct f2fs_nm_info *nm_info;		/* node manager */
@@ -1683,6 +1686,7 @@ struct f2fs_sb_info {
 	unsigned int node_ino_num;		/* node inode number*/
 	unsigned int meta_ino_num;		/* meta inode number*/
     unsigned int meta_mapped_ino_num; /* meta mapped inode number */
+    unsigned int meta_chunk_ino_num; /* meta mapped inode number */
 	unsigned int log_blocks_per_seg;	/* log2 blocks per segment */
 	unsigned int blocks_per_seg;		/* blocks per segment */
 	unsigned int segs_per_sec;		/* segments per section */
@@ -2057,7 +2061,12 @@ static inline struct address_space *META_MAPPING(struct f2fs_sb_info *sbi)
 
 static inline struct address_space *META_MAPPED_MAPPING(struct f2fs_sb_info *sbi)
 {
-  return sbi->mm_inode->i_mapping;
+	return sbi->mm_inode->i_mapping;
+}
+
+static inline struct address_space *META_CHUNK_MAPPING(struct f2fs_sb_info *sbi)
+{
+	return sbi->meta_chunk_inode->i_mapping;
 }
 
 static inline struct address_space *NODE_MAPPING(struct f2fs_sb_info *sbi)
@@ -2420,6 +2429,7 @@ static inline void inc_page_count(struct f2fs_sb_info *sbi, int count_type)
 			count_type == F2FS_DIRTY_NODES ||
 			count_type == F2FS_DIRTY_META ||
 			count_type == F2FS_MM_META_DIRTY ||
+			count_type == F2FS_CHUNK_META_DIRTY ||
 			count_type == F2FS_DIRTY_QDATA ||
 			count_type == F2FS_DIRTY_IMETA)
 		set_sbi_flag(sbi, SBI_IS_DIRTY);
@@ -4598,5 +4608,7 @@ void dump_node_count(struct f2fs_sb_info *sbi);
 int zoned_cp_next_start(struct f2fs_sb_info *sbi,
         block_t *next_start, u32 write_size_blocks);
 long f2fs_sync_meta_mapped_pages(struct f2fs_sb_info *sbi, enum page_type type, long nr_to_write, enum iostat_type io_type);
+long f2fs_sync_meta_chunk_pages(struct f2fs_sb_info *sbi, enum page_type type, long nr_to_write, enum iostat_type io_type);
+
 
 #endif /* _LINUX_F2FS_H */
